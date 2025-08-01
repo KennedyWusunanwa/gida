@@ -92,6 +92,11 @@ export default function Auth() {
     }
   };
 
+  // NEW: browse as guest (no session; just go to homepage)
+  const handleBrowseAsGuest = () => {
+    navigate("/"); // your public homepage route
+  };
+
   return (
     <div className="min-h-screen bg-[#F7F2E9] flex items-center justify-center p-4">
       {/* Parent has no bg to avoid white strip on right */}
@@ -110,6 +115,7 @@ export default function Auth() {
 
           {msg && (
             <div
+              role="status"
               className={`mb-5 rounded-lg px-4 py-3 text-sm ${
                 msg.type === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
               }`}
@@ -160,6 +166,17 @@ export default function Auth() {
                 </button>
               </div>
               <div className="mt-1 text-xs text-gray-500">8+ characters</div>
+
+              {/* Optional: Forgot password link */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={handleResetPassword}
+                  className="text-xs text-[#5B3A1E] underline underline-offset-4"
+                >
+                  Forgot password?
+                </button>
+              </div>
             </div>
 
             <button
@@ -184,6 +201,16 @@ export default function Auth() {
             className="w-full rounded-xl border border-[#E0D7C9] bg-white py-3 font-medium hover:bg-[#F7F2E9] disabled:opacity-60"
           >
             Continue with Google
+          </button>
+
+          {/* NEW: Browse as guest */}
+          <button
+            type="button"
+            onClick={handleBrowseAsGuest}
+            className="w-full mt-3 rounded-xl border border-transparent bg-white py-3 font-medium text-[#5B3A1E] hover:bg-[#F7F2E9]"
+            aria-label="Browse Gida as a guest"
+          >
+            Browse as guest
           </button>
 
           <div className="mt-8">
