@@ -18,7 +18,8 @@ import AdminLayout from "./admin/AdminLayout";
 import AdminOverview from "./admin/pages/Overview";
 import AdminUsers from "./admin/pages/Users";
 import AdminListings from "./admin/pages/Listings";
-import AdminSignIn from "./admin/pages/SignIn"; // ✅ added
+import AdminSignIn from "./admin/pages/SignIn"; // ✅ Admin login page
+import AdminProtected from "./components/AdminProtected"; // ✅ Admin access wrapper
 
 export default function App() {
   return (
@@ -29,9 +30,9 @@ export default function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
         <Route path="/listing/:id" element={<ListingDetail />} />
-        <Route path="/admin/signin" element={<AdminSignIn />} /> {/* ✅ added */}
+        <Route path="/admin/signin" element={<AdminSignIn />} />
 
-        {/* PROTECTED DASHBOARD AREA */}
+        {/* USER DASHBOARD */}
         <Route element={<Protected />}>
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="my-listings" replace />} />
@@ -41,8 +42,10 @@ export default function App() {
             <Route path="inbox" element={<Inbox />} />
             <Route path="edit-profile" element={<EditProfile />} />
           </Route>
+        </Route>
 
-          {/* ADMIN DASHBOARD */}
+        {/* ADMIN DASHBOARD */}
+        <Route element={<AdminProtected />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminOverview />} />
             <Route path="users" element={<AdminUsers />} />
