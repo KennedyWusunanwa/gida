@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminOverview } from "../api";
-import { supabase } from "../../supabaseClient";
 
 export default function Overview() {
   const [data, setData] = useState(null);
@@ -9,10 +8,7 @@ export default function Overview() {
 
   useEffect(() => {
     const loadData = async () => {
-      const {
-        data: overviewData,
-        error,
-      } = await fetchAdminOverview();
+      const { data: overviewData, error } = await fetchAdminOverview();
 
       if (error) {
         setErr("Failed to load admin overview.");
