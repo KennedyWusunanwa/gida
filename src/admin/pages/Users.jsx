@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { listUsers, approveUser } from "../api";
+import { supabase } from "../../supabaseClient";
+
 
 export default function Users() {
   const [rows, setRows] = useState([]);

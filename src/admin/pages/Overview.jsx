@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { fetchAdminOverview } from "../api";
+import { supabase } from "../../supabaseClient";
+
 
 export default function Overview() {
   const [data, setData] = useState(null);
