@@ -7,9 +7,6 @@ import Logo from "../assets/logo.png";
 import HIWSignup from "../assets/hiw-signup.png";
 import HIWSearch from "../assets/hiw-search.png";
 import HIWConnect from "../assets/hiw-connect.png";
-import ImgAccra from "../assets/accra.jpg";
-import ImgKumasi from "../assets/kumasi.jpg";
-import ImgTakoradi from "../assets/takoradi.jpg";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -43,16 +40,9 @@ export default function Home() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("listings")
-        .select(
-          "id, title, city, price, price_ghs, image_url, is_featured, is_published, created_at"
-        )
-        .eq("is_featured", true)
-        .eq("is_published", true)
-        .order("created_at", { ascending: false })
-        .limit(6);
-
+      const { data, error } = await supabase.rpc("get_random_featured_listings", {
+        count: 3,
+      });
       if (error) setErr(error.message);
       else setFeatured(data || []);
       setLoading(false);
@@ -81,13 +71,11 @@ export default function Home() {
       {/* NAVBAR */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-          {/* Brand */}
           <Link to="/" className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
           </Link>
 
-          {/* Desktop menu */}
           <div className="hidden md:flex items-center gap-8">
             <Link to="/search" className="hover:opacity-70">Find Room</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
@@ -95,10 +83,7 @@ export default function Home() {
 
             {user ? (
               <div className="flex items-center gap-3">
-                <Link
-                  to="/app/my-listings"
-                  className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
-                >
+                <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
                   View Dashboard
                 </Link>
                 <button
@@ -109,16 +94,12 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <Link
-                to="/auth"
-                className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
-              >
+              <Link to="/auth" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
                 Sign Up
               </Link>
             )}
           </div>
 
-          {/* Mobile hamburger */}
           <button
             type="button"
             className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
@@ -138,7 +119,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Mobile dropdown */}
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
@@ -191,7 +171,6 @@ export default function Home() {
             <span> find your people.</span>
           </h1>
 
-          {/* Search bar */}
           <form
             onSubmit={onSearch}
             className="mt-8 mx-auto w-full md:w-[760px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3 flex flex-col md:flex-row gap-3"
@@ -222,7 +201,6 @@ export default function Home() {
         {/* HOW IT WORKS */}
         <section className="py-10">
           <h2 className="text-2xl md:text-3xl font-extrabold text-center">How it Works</h2>
-
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="flex flex-col items-center text-center">
               <img src={HIWSignup} alt="Sign Up" className="h-36 object-contain" />
@@ -242,67 +220,31 @@ export default function Home() {
         {/* POPULAR LISTINGS */}
         <section className="py-6 pb-16">
           <h3 className="text-2xl md:text-3xl font-extrabold">Popular Listings</h3>
-
           {err && <p className="mt-3 text-red-600">{err}</p>}
           {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featured.length > 0
-              ? featured.map((item) => {
-                  const img = item.image_url?.startsWith("http")
-                    ? item.image_url
-                    : item.image_url || "/images/placeholder.jpg";
-                  const price = item.price ?? item.price_ghs;
-                  return (
-                    <article key={item.id} className="bg-white rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-                      <div className="relative h-48">
-                        <img src={img} alt={item.title || item.city} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="p-4">
-                        <h4 className="text-xl font-bold">{item.city}</h4>
-                        {price != null && (
-                          <p className="mt-1 text-[#3B2719] font-semibold">
-                            GHS {Number(price).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })
-              : (
-                <>
-                  <article className="bg-white rounded-2xl overflow-hidden shadow">
-                    <div className="relative h-48">
-                      <img src={ImgAccra} alt="Accra" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="p-4">
-                      <h4 className="text-xl font-bold">Accra</h4>
-                      <p className="mt-1 text-[#3B2719] font-semibold">GHS 3,652</p>
-                    </div>
-                  </article>
-
-                  <article className="bg-white rounded-2xl overflow-hidden shadow">
-                    <div className="relative h-48">
-                      <img src={ImgKumasi} alt="Kumasi" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="p-4">
-                      <h4 className="text-xl font-bold">Kumasi</h4>
-                      <p className="mt-1 text-[#3B2719] font-semibold">GHS 343</p>
-                    </div>
-                  </article>
-
-                  <article className="bg-white rounded-2xl overflow-hidden shadow">
-                    <div className="relative h-48">
-                      <img src={ImgTakoradi} alt="Takoradi" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="p-4">
-                      <h4 className="text-xl font-bold">Takoradi</h4>
-                      <p className="mt-1 text-[#3B2719] font-semibold">GHS 350</p>
-                    </div>
-                  </article>
-                </>
-              )
-            }
+            {featured.map((item) => {
+              const img = item.image_url?.startsWith("http")
+                ? item.image_url
+                : item.image_url || "/images/placeholder.jpg";
+              const price = item.price ?? item.price_ghs;
+              return (
+                <article key={item.id} className="bg-white rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+                  <div className="relative h-48">
+                    <img src={img} alt={item.title || item.city} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="p-4">
+                    <h4 className="text-xl font-bold">{item.city}</h4>
+                    {price != null && (
+                      <p className="mt-1 text-[#3B2719] font-semibold">
+                        GHS {Number(price).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       </main>
