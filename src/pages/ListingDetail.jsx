@@ -6,12 +6,15 @@ import Logo from "../assets/logo.png";
 export default function ListingDetails() {
   const { id } = useParams();
   const [item, setItem] = useState(null);
+  const [extraImages, setExtraImages] = useState([]);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+
+      // Fetch main listing
       const { data, error } = await supabase
         .from("listings")
         .select(
@@ -19,10 +22,26 @@ export default function ListingDetails() {
         )
         .eq("id", id)
         .single();
-      if (error) setErr(error.message);
-      else setItem(data || null);
+
+      if (error) {
+        setErr(error.message);
+        setLoading(false);
+        return;
+      }
+      setItem(data || null);
+
+      // Fetch extra images
+      const { data: imgs, error: imgErr } = await supabase
+        .from("listing_images")
+        .select("id, url")
+        .eq("listing_id", id)
+        .order("created_at", { ascending: true });
+
+      if (!imgErr) setExtraImages(imgs || []);
+
       setLoading(false);
     };
+
     load();
   }, [id]);
 
@@ -54,7 +73,8 @@ export default function ListingDetails() {
         {/* Price + title */}
         {price != null && (
           <div className="text-2xl md:text-3xl font-extrabold text-[#5B3A1E]">
-            GH₵{Number(price).toLocaleString()} <span className="text-base font-semibold text-[#2A1E14]">/ month</span>
+            GH₵{Number(price).toLocaleString()}{" "}
+            <span className="text-base font-semibold text-[#2A1E14]">/ month</span>
           </div>
         )}
         <h1 className="mt-2 text-4xl md:text-5xl font-extrabold">{title}</h1>
@@ -71,6 +91,20 @@ export default function ListingDetails() {
             className="w-full h-[380px] object-cover"
           />
         </div>
+
+        {/* Extra images grid */}
+        {extraImages.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {extraImages.map((img) => (
+              <img
+                key={img.id}
+                src={img.url}
+                alt="Listing extra"
+                className="w-full h-32 object-cover rounded-lg"
+              />
+            ))}
+          </div>
+        )}
 
         {/* Attributes + host */}
         <section className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">

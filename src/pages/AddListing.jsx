@@ -11,40 +11,34 @@ export default function AddListing() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  // NEW: file upload states
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  // NEW: multiple files
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   const [msg, setMsg] = useState(null);
   const [adding, setAdding] = useState(false);
 
-  const onFileChange = (e) => {
-    const f = e.target.files?.[0];
-    setFile(f || null);
-    setPreview(f ? URL.createObjectURL(f) : null);
+  const onFilesChange = (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    setFiles(selectedFiles);
+    setPreviews(selectedFiles.map((f) => URL.createObjectURL(f)));
   };
 
-  const uploadImageAndGetUrl = async () => {
-    if (!file) return null;
-
+  const uploadImagesAndGetUrls = async () => {
+    if (!files.length) return [];
     const bucket = "listing-images";
-    // unique path per user
-    const path = `${user.id}/${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
-
-    // Upload to Storage
-    const { error: uploadErr } = await supabase.storage
-      .from(bucket)
-      .upload(path, file, {
+    const uploads = files.map(async (f, idx) => {
+      const path = `${user.id}/${Date.now()}-${idx}-${f.name.replace(/\s+/g, "-")}`;
+      const { error: upErr } = await supabase.storage.from(bucket).upload(path, f, {
         cacheControl: "3600",
         upsert: false,
-        contentType: file.type || "image/*",
+        contentType: f.type || "image/*",
       });
-
-    if (uploadErr) throw uploadErr;
-
-    // Get the public URL
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return data.publicUrl ?? null;
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    });
+    return Promise.all(uploads);
   };
 
   const submit = async (e) => {
@@ -61,42 +55,55 @@ export default function AddListing() {
     try {
       setAdding(true);
 
-      // 1) upload image first (if provided)
-      let imageUrl = null;
-      if (file) {
-        imageUrl = await uploadImageAndGetUrl();
+      // 1) Upload images
+      const urls = await uploadImagesAndGetUrls();
+      const mainUrl = urls[0] || null;
+      const extraUrls = urls.slice(1);
+
+      // 2) Insert listing and get id
+      const { data: listing, error: listingErr } = await supabase
+        .from("listings")
+        .insert([
+          {
+            user_id: user.id,
+            title,
+            location,
+            city,
+            price: Number(price),
+            description,
+            image_url: mainUrl,
+            is_published: true,
+          },
+        ])
+        .select("id")
+        .single();
+
+      if (listingErr) throw listingErr;
+
+      // 3) Insert extra images
+      if (extraUrls.length) {
+        const rows = extraUrls.map((url) => ({
+          listing_id: listing.id,
+          url,
+        }));
+        const { error: imgErr } = await supabase.from("listing_images").insert(rows);
+        if (imgErr) throw imgErr;
       }
 
-      // 2) insert listing
-      const { error } = await supabase.from("listings").insert([
-        {
-          user_id: user.id,
-          title,
-          location,
-          city,
-          price: Number(price),
-          description,
-          image_url: imageUrl, // store the Storage public URL
-          is_published: true,  // optional default
-        },
-      ]);
-
-      if (error) throw error;
-
       setMsg("Listing added!");
-      // reset
+      // reset form
       setTitle("");
       setLocation("");
       setCity("");
       setPrice("");
       setDescription("");
-      setFile(null);
-      setPreview(null);
-      // Clear file input visually
-      const fileInput = document.getElementById("listing-image-input");
-      if (fileInput) fileInput.value = "";
+      setFiles([]);
+      setPreviews([]);
+      const inputEl = document.getElementById("listing-images-input");
+      if (inputEl) inputEl.value = "";
+
     } catch (err) {
-      setMsg(`Error: ${err.message || err.toString()}`);
+      setMsg(`Error: ${err.message || String(err)}`);
     } finally {
       setAdding(false);
     }
@@ -145,31 +152,39 @@ export default function AddListing() {
           onChange={(e) => setDescription(e.target.value)}
         />
 
-        {/* NEW: Image upload (instead of URL) */}
+        {/* Multiple images */}
         <div style={{ display: "grid", gap: 8 }}>
-          <label style={{ fontSize: 14, opacity: 0.8 }}>Listing Image</label>
+          <label style={{ fontSize: 14, opacity: 0.8 }}>
+            Listing Images (first image becomes main photo)
+          </label>
           <input
-            id="listing-image-input"
+            id="listing-images-input"
             className="input"
             type="file"
             accept="image/*"
-            onChange={onFileChange}
+            multiple
+            onChange={onFilesChange}
           />
-          {preview && (
-            <img
-              src={preview}
-              alt="Preview"
-              style={{
-                width: 220,
-                height: 140,
-                objectFit: "cover",
-                borderRadius: 12,
-                border: "1px solid rgba(0,0,0,0.08)",
-              }}
-            />
+          {previews.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {previews.map((src, i) => (
+                <img
+                  key={i}
+                  src={src}
+                  alt={`Preview ${i + 1}`}
+                  style={{
+                    width: 120,
+                    height: 90,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid rgba(0,0,0,0.08)",
+                  }}
+                />
+              ))}
+            </div>
           )}
           <small style={{ opacity: 0.7 }}>
-            Recommended: JPEG/PNG, &lt; 5MB.
+            Select multiple images at once. Recommended: JPEG/PNG, &lt; 5MB each.
           </small>
         </div>
 
