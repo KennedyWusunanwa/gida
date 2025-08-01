@@ -20,6 +20,7 @@ export default function Home() {
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     let sub;
@@ -44,7 +45,9 @@ export default function Home() {
       setLoading(true);
       const { data, error } = await supabase
         .from("listings")
-        .select("id, title, city, price, price_ghs, image_url, is_featured, is_published, created_at")
+        .select(
+          "id, title, city, price, price_ghs, image_url, is_featured, is_published, created_at"
+        )
         .eq("is_featured", true)
         .eq("is_published", true)
         .order("created_at", { ascending: false })
@@ -55,6 +58,14 @@ export default function Home() {
       setLoading(false);
     };
     load();
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 768) setMobileOpen(false);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const onSearch = (e) => {
@@ -70,11 +81,13 @@ export default function Home() {
       {/* NAVBAR */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
+          {/* Brand */}
           <Link to="/" className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
           </Link>
 
+          {/* Desktop menu */}
           <div className="hidden md:flex items-center gap-8">
             <Link to="/search" className="hover:opacity-70">Find Room</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
@@ -104,7 +117,69 @@ export default function Home() {
               </Link>
             )}
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            type="button"
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
+            aria-label="Open menu"
+            aria-expanded={mobileOpen ? "true" : "false"}
+            onClick={() => setMobileOpen((s) => !s)}
+          >
+            {!mobileOpen ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile dropdown */}
+        {mobileOpen && (
+          <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
+            <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
+              <Link to="/search" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
+                Find Room
+              </Link>
+              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
+                Listings
+              </Link>
+              <Link to="/messages" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
+                Messages
+              </Link>
+
+              {user ? (
+                <>
+                  <Link
+                    to="/app/my-listings"
+                    onClick={() => setMobileOpen(false)}
+                    className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2"
+                  >
+                    View Dashboard
+                  </Link>
+                  <button
+                    onClick={() => { setMobileOpen(false); logout(); }}
+                    className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg-black/5"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <Link
+                  to="/auth"
+                  onClick={() => setMobileOpen(false)}
+                  className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2"
+                >
+                  Sign Up
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* PAGE CONTAINER */}
