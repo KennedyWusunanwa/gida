@@ -18,6 +18,7 @@ import AdminLayout from "./admin/AdminLayout";
 import AdminOverview from "./admin/pages/Overview";
 import AdminUsers from "./admin/pages/Users";
 import AdminListings from "./admin/pages/Listings";
+import AdminSignIn from "./admin/pages/SignIn"; // ✅ added
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
         <Route path="/listing/:id" element={<ListingDetail />} />
+        <Route path="/admin/signin" element={<AdminSignIn />} /> {/* ✅ added */}
 
         {/* PROTECTED DASHBOARD AREA */}
         <Route element={<Protected />}>

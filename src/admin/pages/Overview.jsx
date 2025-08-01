@@ -1,52 +1,38 @@
-import React, { useEffect, useState } from "react";
-import { fetchAdminOverview } from "../api";
+import { useEffect, useState } from "react";
+import { supabase } from "../../supabaseClient";
 
 export default function Overview() {
-  const [data, setData] = useState(null);
-  const [err, setErr] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ users: 0, listings: 0 });
 
   useEffect(() => {
-    const loadData = async () => {
-      const { data: overviewData, error } = await fetchAdminOverview();
+    const fetchStats = async () => {
+      const [{ count: userCount }] = await Promise.all([
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        supabase.from("listings").select("*", { count: "exact", head: true }),
+      ]);
 
-      if (error) {
-        setErr("Failed to load admin overview.");
-      } else {
-        setData(overviewData?.[0] || null);
-      }
+      const { count: listingCount } = await supabase
+        .from("listings")
+        .select("*", { count: "exact", head: true });
 
-      setLoading(false);
+      setStats({ users: userCount, listings: listingCount });
     };
 
-    loadData();
+    fetchStats();
   }, []);
 
-  if (loading) return <p className="text-black/60">Loading overview…</p>;
-  if (err) return <p className="text-red-600">{err}</p>;
-  if (!data) return <p className="text-black/60">No data available.</p>;
-
-  const cards = [
-    { label: "Total Users", value: data.total_users ?? 0 },
-    { label: "Verified Users", value: data.verified_users ?? 0 },
-    { label: "Total Listings", value: data.total_listings ?? 0 },
-    { label: "Approved Listings", value: data.approved_listings ?? 0 },
-    { label: "Pending Listings", value: data.pending_listings ?? 0 },
-    { label: "Rejected Listings", value: data.rejected_listings ?? 0 },
-    { label: "New Users (30d)", value: data.last_30d_new_users ?? 0 },
-    { label: "New Listings (30d)", value: data.last_30d_new_listings ?? 0 },
-  ];
-
   return (
-    <div>
-      <h1 className="text-3xl font-extrabold text-[#5B3A1E] mb-6">Service Overview</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map((c) => (
-          <div key={c.label} className="rounded-xl bg-white shadow p-4">
-            <div className="text-xs uppercase text-black/50">{c.label}</div>
-            <div className="mt-1 text-2xl font-bold">{c.value}</div>
-          </div>
-        ))}
+    <div className="p-4">
+      <h2 className="text-xl font-bold mb-4">Overview</h2>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="bg-white p-6 rounded shadow">
+          <p className="text-sm text-gray-500">Total Users</p>
+          <p className="text-2xl font-bold">{stats.users}</p>
+        </div>
+        <div className="bg-white p-6 rounded shadow">
+          <p className="text-sm text-gray-500">Total Listings</p>
+          <p className="text-2xl font-bold">{stats.listings}</p>
+        </div>
       </div>
     </div>
   );
