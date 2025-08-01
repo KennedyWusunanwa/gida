@@ -12,7 +12,7 @@ export default function AddListing() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  // UI-only (not persisted yet)
+  // New UI fields (now persisted)
   const [roomType, setRoomType] = useState("Single Room");
   const [gender, setGender] = useState("Any");
   const [lifestyle, setLifestyle] = useState("Any");
@@ -77,7 +77,7 @@ export default function AddListing() {
       const mainUrl = urls[0] || null;
       const extraUrls = urls.slice(1);
 
-      // 2) Insert listing
+      // 2) Insert listing (PERSIST NEW FIELDS)
       const { data: listing, error: listingErr } = await supabase
         .from("listings")
         .insert([
@@ -90,6 +90,12 @@ export default function AddListing() {
             description,
             image_url: mainUrl,
             is_published: true,
+
+            // NEW persisted fields
+            room_type: roomType,
+            gender_pref: gender,
+            lifestyle_pref: lifestyle,
+            pets_pref: pets,
           },
         ])
         .select("id")
@@ -111,6 +117,10 @@ export default function AddListing() {
       setCity("");
       setPrice("");
       setDescription("");
+      setRoomType("Single Room");
+      setGender("Any");
+      setLifestyle("Any");
+      setPets("No preference");
       setFiles([]);
       setPreviews([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
