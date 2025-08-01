@@ -224,27 +224,46 @@ export default function Home() {
           {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featured.map((item) => {
-              const img = item.image_url?.startsWith("http")
-                ? item.image_url
-                : item.image_url || "/images/placeholder.jpg";
-              const price = item.price ?? item.price_ghs;
-              return (
-                <article key={item.id} className="bg-white rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-                  <div className="relative h-48">
-                    <img src={img} alt={item.title || item.city} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="p-4">
-                    <h4 className="text-xl font-bold">{item.city}</h4>
-                    {price != null && (
-                      <p className="mt-1 text-[#3B2719] font-semibold">
-                        GHS {Number(price).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
+          {featured.map((item) => {
+  const img = item.image_url?.startsWith("http")
+    ? item.image_url
+    : item.image_url || "/images/placeholder.jpg";
+  const price = item.price ?? item.price_ghs;
+  return (
+    <Link
+      to={`/listings/${item.id}`}
+      key={item.id}
+      className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
+    >
+      <div className="relative h-48">
+        <img src={img} alt={item.title} className="w-full h-full object-cover" />
+        {price != null && (
+          <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
+            GHC {Number(price).toLocaleString()}
+          </div>
+        )}
+      </div>
+      <div className="p-4 space-y-1">
+        <h4 className="text-base font-bold truncate">{item.title}</h4>
+        <div className="text-sm text-black/80 flex flex-col gap-0.5">
+          <div className="flex items-center gap-1">
+            <span>🛏</span>
+            <span>{item.room_type}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>🏢</span>
+            <span>{item.property_type}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span>👤</span>
+            <span>{item.gender}</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+})}
+
           </div>
         </section>
       </main>
