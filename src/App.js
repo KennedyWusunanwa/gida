@@ -1,25 +1,45 @@
-import logo from './logo.svg';
-import './App.css';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Home from "./pages/Home";
+import Auth from "./pages/Auth";
+import DashboardLayout from "./layouts/DashboardLayout";
+import MyListings from "./pages/MyListings";
+import AddListing from "./pages/AddListing";
+import Saved from "./pages/Saved";
+import Inbox from "./pages/Inbox";
+import EditProfile from "./pages/EditProfile";
+import Protected from "./components/Protected";
 
-function App() {
+// New pages
+import Listings from "./pages/Listings";
+import ListingDetail from "./pages/ListingDetail";
+
+
+export default function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        {/* PUBLIC ROUTES */}
+        <Route path="/" element={<Home />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/listings" element={<Listings />} />
+<Route path="/listing/:id" element={<ListingDetail />} />
+
+
+        {/* PROTECTED DASHBOARD AREA */}
+        <Route element={<Protected />}>
+          <Route path="/app" element={<DashboardLayout />}>
+            <Route index element={<Navigate to="my-listings" replace />} />
+            <Route path="my-listings" element={<MyListings />} />
+            <Route path="add-listing" element={<AddListing />} />
+            <Route path="saved" element={<Saved />} />
+            <Route path="inbox" element={<Inbox />} />
+            <Route path="edit-profile" element={<EditProfile />} />
+          </Route>
+        </Route>
+
+        {/* FALLBACK */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;

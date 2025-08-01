@@ -1,0 +1,75 @@
+:root {
+  --bg: #f7f2e9;
+  --panel: #ffffff;
+  --brown: #5B3A1E;
+  --brown-2: #8B5E34;
+  --text: #2b2b2b;
+  --muted: #6b7280;
+  --ring: rgba(166,114,75,.25);
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+
+.page { padding: 2rem; }
+
+.dash {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  min-height: 100vh;
+}
+
+.dash__sidebar {
+  background: #fff;
+  border-right: 1px solid #eee;
+  padding: 24px 18px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+.brand__logo { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: var(--brown-2); color: #fff; }
+.brand__name { font-weight: 800; font-size: 20px; color: var(--brown); }
+
+.nav { display: grid; gap: 8px; margin-top: 8px; }
+.nav__link {
+  padding: 10px 12px; border-radius: 10px; color: #333; text-decoration: none;
+}
+.nav__link.active, .nav__link:hover {
+  background: #f3ede4; color: var(--brown);
+  outline: 2px solid transparent; box-shadow: 0 0 0 3px var(--ring);
+}
+
+.verified { margin-top: auto; display: flex; align-items: center; gap: 8px; color: #2b2b2b; font-weight: 600; }
+.dot { width: 10px; height: 10px; background: #10b981; border-radius: 50%; display: inline-block; }
+
+.dash__main { display: grid; grid-template-rows: 64px 1fr; }
+.dash__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; background: #fff; border-bottom: 1px solid #eee;
+}
+
+.header__left { display: flex; align-items: center; gap: 18px; }
+.header__link { color: var(--muted); text-decoration: none; font-weight: 600; }
+.header__link.active, .header__link:hover { color: var(--brown); }
+
+.header__right { display: flex; align-items: center; gap: 12px; }
+.user { color: var(--muted); font-size: 14px; }
+
+.btn { padding: 8px 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: 600; }
+.btn--ghost { background: #fff; border: 1px solid #e5e7eb; }
+.btn--primary { background: var(--brown); color: #fff; }
+
+.dash__content { padding: 24px; }
+
+.card {
+  background: var(--panel); border: 1px solid #eee; border-radius: 16px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.06); padding: 16px;
+}
+
+.grid {
+  display: grid; gap: 18px; grid-template-columns: repeat(auto-fill,minmax(280px,1fr));
+}
+
+.input, .textarea {
+  width: 100%; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; outline: none;
+}
+.input:focus, .textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
