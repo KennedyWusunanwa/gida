@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import "./dashboard.css"; // styles below
+import { Menu, X } from "lucide-react"; // for hamburger icons
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -23,46 +24,70 @@ export default function DashboardLayout() {
     navigate("/");
   };
 
-  if (loading) return <div className="page"><p>Loading…</p></div>;
+  if (loading) return <div className="p-6">Loading…</div>;
 
   return (
-    <div className="dash">
-      {/* Sidebar */}
-      <aside className="dash__sidebar">
-        <div className="brand">
-          <div className="brand__logo">🏠</div>
-          <div className="brand__name">Gida</div>
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Sidebar (mobile toggle) */}
+      <aside
+        className={`bg-[#3B2719] text-white w-full md:w-64 p-4 fixed md:static z-40 h-full md:h-auto transform transition-transform duration-200 ease-in-out
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+      >
+        <div className="flex justify-between items-center md:block">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏠</span>
+            <span className="font-bold text-lg">Gida</span>
+          </div>
+          <button
+            className="md:hidden text-white"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={24} />
+          </button>
         </div>
 
-        <nav className="nav">
-          <NavLink to="/app/my-listings" className="nav__link">My Listings</NavLink>
-          <NavLink to="/app/add-listing" className="nav__link">Add Listing</NavLink>
-          <NavLink to="/app/saved" className="nav__link">Saved Listings</NavLink>
-          <NavLink to="/app/inbox" className="nav__link">Inbox</NavLink>
-          <NavLink to="/app/edit-profile" className="nav__link">Edit Profile</NavLink>
+        <nav className="mt-6 flex flex-col gap-3">
+          <NavLink to="/app/my-listings" className="hover:bg-[#5B3A1E] p-2 rounded">My Listings</NavLink>
+          <NavLink to="/app/add-listing" className="hover:bg-[#5B3A1E] p-2 rounded">Add Listing</NavLink>
+          <NavLink to="/app/saved" className="hover:bg-[#5B3A1E] p-2 rounded">Saved Listings</NavLink>
+          <NavLink to="/app/inbox" className="hover:bg-[#5B3A1E] p-2 rounded">Inbox</NavLink>
+          <NavLink to="/app/edit-profile" className="hover:bg-[#5B3A1E] p-2 rounded">Edit Profile</NavLink>
         </nav>
 
-        <div className="verified">
-          <span className="dot" /> Verified
+        <div className="mt-6 flex items-center gap-2 text-sm opacity-80">
+          <span className="h-2 w-2 bg-green-500 rounded-full"></span>
+          Verified
         </div>
       </aside>
 
-      {/* Main area */}
-      <div className="dash__main">
-        <header className="dash__header">
-          <div className="header__left">
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="bg-[#F7F0E6] border-b border-black/10 px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button
+              className="md:hidden"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu size={24} />
+            </button>
             <strong>Find Room</strong>
-            <NavLink to="/app/saved" className="header__link">Saved</NavLink>
-            <NavLink to="/app/inbox" className="header__link">Inbox</NavLink>
+            <NavLink to="/app/saved" className="hidden sm:inline hover:underline">Saved</NavLink>
+            <NavLink to="/app/inbox" className="hidden sm:inline hover:underline">Inbox</NavLink>
           </div>
-          <div className="header__right">
-            <span className="user">{user?.email}</span>
-            <button className="btn btn--ghost" onClick={logout}>Logout</button>
+          <div className="flex items-center gap-3">
+            <span className="text-sm">{user?.email}</span>
+            <button
+              className="text-sm border px-3 py-1 rounded hover:bg-black/5"
+              onClick={logout}
+            >
+              Logout
+            </button>
           </div>
         </header>
 
-        <main className="dash__content">
-          {/* Pass user down to pages */}
+        {/* Page content */}
+        <main className="flex-1 p-4 sm:p-6 bg-[#F7F0E6] overflow-x-auto">
           <Outlet context={{ user }} />
         </main>
       </div>
@@ -72,7 +97,6 @@ export default function DashboardLayout() {
 
 // hook to use the user in child routes
 export const useDashboardUser = () => {
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { user } = require("react-router-dom").useOutletContext() || {};
+  const { user } = useOutletContext() || {};
   return user;
 };
