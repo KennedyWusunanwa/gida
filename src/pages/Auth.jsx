@@ -1,19 +1,18 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import logo from "../assets/logo.png"; // small logo (optional)
+import logo from "../assets/logo.png"; // optional logo
 
 export default function Auth() {
   const navigate = useNavigate();
 
-  // Start on Sign Up to match your mock
-  const [mode, setMode] = useState("signup"); // 'signup' | 'login'
+  const [mode, setMode] = useState("signup");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null); // {type:'error'|'info', text:string}
+  const [msg, setMsg] = useState(null);
 
   const isSignup = mode === "signup";
 
@@ -51,7 +50,22 @@ export default function Auth() {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        if (data?.session) navigate("/app/my-listings");
+
+        if (data?.session) {
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", data.session.user.id)
+            .single();
+
+          if (profileError) throw profileError;
+
+          if (profile?.is_admin) {
+            navigate("/admin");
+          } else {
+            navigate("/app/my-listings");
+          }
+        }
       }
     } catch (err) {
       setMsg({ type: "error", text: err?.message || "Something went wrong." });
@@ -92,20 +106,15 @@ export default function Auth() {
     }
   };
 
-  // NEW: browse as guest (no session; just go to homepage)
-  const handleBrowseAsGuest = () => {
-    navigate("/"); // your public homepage route
-  };
+  const handleBrowseAsGuest = () => navigate("/");
 
   return (
     <div className="min-h-screen bg-[#F7F2E9] flex items-center justify-center p-4">
-      {/* Parent has no bg to avoid white strip on right */}
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 rounded-2xl shadow-xl overflow-hidden">
-
-        {/* LEFT: cream form panel */}
+        {/* LEFT: form */}
         <div className="bg-[#FBF3E6] p-8 sm:p-12">
           <div className="flex items-center gap-3 mb-10">
-            {logo ? <img src={logo} alt="Gida" className="h-8 w-8" /> : null}
+            {logo && <img src={logo} alt="Gida" className="h-8 w-8" />}
             <span className="text-2xl font-semibold text-[#5B3A1E]">Gida</span>
           </div>
 
@@ -132,7 +141,6 @@ export default function Auth() {
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
                 placeholder="Full Name"
-                autoComplete="name"
               />
             )}
 
@@ -142,7 +150,6 @@ export default function Auth() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
               placeholder="Email"
-              autoComplete="email"
               required
             />
 
@@ -154,7 +161,6 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-[#A6724B]"
                   placeholder="Password"
-                  autoComplete={isSignup ? "new-password" : "current-password"}
                   required
                 />
                 <button
@@ -167,7 +173,6 @@ export default function Auth() {
               </div>
               <div className="mt-1 text-xs text-gray-500">8+ characters</div>
 
-              {/* Optional: Forgot password link */}
               <div className="mt-2">
                 <button
                   type="button"
@@ -188,7 +193,6 @@ export default function Auth() {
             </button>
           </form>
 
-          {/* Divider */}
           <div className="flex items-center gap-4 my-6">
             <hr className="flex-1 border-[#E7E1D8]" />
             <span className="text-gray-500 text-sm">Or</span>
@@ -203,12 +207,10 @@ export default function Auth() {
             Continue with Google
           </button>
 
-          {/* NEW: Browse as guest */}
           <button
             type="button"
             onClick={handleBrowseAsGuest}
             className="w-full mt-3 rounded-xl border border-transparent bg-white py-3 font-medium text-[#5B3A1E] hover:bg-[#F7F2E9]"
-            aria-label="Browse Gida as a guest"
           >
             Browse as guest
           </button>
@@ -240,10 +242,9 @@ export default function Auth() {
           </div>
         </div>
 
-        {/* RIGHT: solid brown with big white logo and wordmark */}
+        {/* RIGHT: Decorative Panel */}
         <div className="relative hidden md:flex items-center justify-center bg-[#8B5E34]">
           <div className="text-white text-center px-8">
-            {/* Inline white SVG mark (no external asset needed) */}
             <svg
               className="mx-auto mb-6 h-28 w-28"
               viewBox="0 0 64 64"
