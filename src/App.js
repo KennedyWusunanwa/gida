@@ -9,10 +9,15 @@ import Inbox from "./pages/Inbox";
 import EditProfile from "./pages/EditProfile";
 import Protected from "./components/Protected";
 
-// New pages
+// Public pages
 import Listings from "./pages/Listings";
 import ListingDetail from "./pages/ListingDetail";
 
+// Admin pages
+import AdminLayout from "./admin/AdminLayout";
+import AdminOverview from "./admin/pages/Overview";
+import AdminUsers from "./admin/pages/Users";
+import AdminListings from "./admin/pages/Listings";
 
 export default function App() {
   return (
@@ -22,8 +27,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
-<Route path="/listing/:id" element={<ListingDetail />} />
-
+        <Route path="/listing/:id" element={<ListingDetail />} />
 
         {/* PROTECTED DASHBOARD AREA */}
         <Route element={<Protected />}>
@@ -34,6 +38,13 @@ export default function App() {
             <Route path="saved" element={<Saved />} />
             <Route path="inbox" element={<Inbox />} />
             <Route path="edit-profile" element={<EditProfile />} />
+          </Route>
+
+          {/* ADMIN DASHBOARD */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminOverview />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="listings" element={<AdminListings />} />
           </Route>
         </Route>
 

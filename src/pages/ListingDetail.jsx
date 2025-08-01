@@ -13,12 +13,35 @@ export default function ListingDetails() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setErr(null);
 
-      // Fetch main listing
+      // 1) Main listing (include all fields we want to display)
       const { data, error } = await supabase
         .from("listings")
         .select(
-          "id, title, city, location, price, price_ghs, description, image_url, property_type, room_type, gender_pref, amenities, host_name, host_avatar_url, is_verified_host"
+          [
+            "id",
+            "title",
+            "city",
+            "location",
+            "price",
+            "price_ghs",
+            "description",
+            "image_url",
+            // property basics
+            "property_type",
+            "room_type",
+            // roommate prefs (make sure you add these columns when you’re ready)
+            "gender_pref",
+            "lifestyle_pref",
+            "pets_pref",
+            // misc
+            "amenities",
+            "host_name",
+            "host_avatar_url",
+            "is_verified_host",
+            "created_at",
+          ].join(", ")
         )
         .eq("id", id)
         .single();
@@ -30,7 +53,7 @@ export default function ListingDetails() {
       }
       setItem(data || null);
 
-      // Fetch extra images
+      // 2) Extra images (gallery)
       const { data: imgs, error: imgErr } = await supabase
         .from("listing_images")
         .select("id, url")
@@ -38,7 +61,6 @@ export default function ListingDetails() {
         .order("created_at", { ascending: true });
 
       if (!imgErr) setExtraImages(imgs || []);
-
       setLoading(false);
     };
 
@@ -51,6 +73,10 @@ export default function ListingDetails() {
 
   const price = item.price ?? item.price_ghs;
   const title = item.title || `Room in ${item.city || item.location || ""}`;
+
+  // Helper to print “—” when empty
+  const display = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : v;
 
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
@@ -71,13 +97,20 @@ export default function ListingDetails() {
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {/* Price + title */}
-        {price != null && (
-          <div className="text-2xl md:text-3xl font-extrabold text-[#5B3A1E]">
-            GH₵{Number(price).toLocaleString()}{" "}
-            <span className="text-base font-semibold text-[#2A1E14]">/ month</span>
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            {price != null && (
+              <div className="text-2xl md:text-3xl font-extrabold text-[#5B3A1E]">
+                GH₵{Number(price).toLocaleString()}{" "}
+                <span className="text-base font-semibold text-[#2A1E14]">/ month</span>
+              </div>
+            )}
+            <h1 className="mt-1 text-4xl md:text-5xl font-extrabold">{title}</h1>
+            <p className="mt-1 text-black/70">
+              {display(item.location)}{item.city ? `, ${item.city}` : ""}
+            </p>
           </div>
-        )}
-        <h1 className="mt-2 text-4xl md:text-5xl font-extrabold">{title}</h1>
+        </div>
 
         {/* Hero image */}
         <div className="mt-6 bg-white rounded-2xl overflow-hidden shadow">
@@ -106,34 +139,53 @@ export default function ListingDetails() {
           </div>
         )}
 
-        {/* Attributes + host */}
+        {/* Details + host card */}
         <section className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
+          {/* Left column: all attributes user entered */}
           <div className="bg-white rounded-2xl p-6 shadow">
-            <ul className="space-y-3 text-[#2A1E14]">
-              <li>• Location: <strong>{item.city || item.location || "—"}</strong></li>
-              <li>• {item.room_type ? item.room_type : "Private room"}</li>
-              <li>• {item.property_type ? item.property_type : "Apartment"}</li>
-              <li>
-                • Utilities / Amenities:&nbsp;
-                <strong>
-                  {Array.isArray(item.amenities) && item.amenities.length
-                    ? item.amenities.join(" | ")
-                    : "Wi-Fi | Washer"}
-                </strong>
-              </li>
-            </ul>
+            {/* Quick facts */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Fact label="Room Type" value={display(item.room_type, "—")} />
+              <Fact label="Property Type" value={display(item.property_type, "—")} />
+              <Fact label="Location" value={display(item.location, "—")} />
+              <Fact label="City" value={display(item.city, "—")} />
+            </div>
 
-            <h3 className="mt-8 text-2xl font-extrabold">About this listing</h3>
+            {/* Roommate preferences */}
+            <h3 className="mt-8 text-xl font-extrabold">Roommate Preferences</h3>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Fact label="Gender" value={display(item.gender_pref, "Any")} />
+              <Fact label="Lifestyle" value={display(item.lifestyle_pref, "Any")} />
+              <Fact label="Pets" value={display(item.pets_pref, "No preference")} />
+            </div>
+
+            {/* Amenities */}
+            <h3 className="mt-8 text-xl font-extrabold">Amenities</h3>
             <p className="mt-3 leading-7">
-              {item.description ||
-                "Spacious private room in a 3-bedroom apartment. In the heart of town. Fully furnished. Proximity to shops and public transport."}
+              {Array.isArray(item.amenities) && item.amenities.length
+                ? item.amenities.join(" · ")
+                : "—"}
             </p>
 
-            <button className="mt-8 text-sm underline underline-offset-4 text-black/80">
+            {/* Description */}
+            <h3 className="mt-8 text-2xl font-extrabold">About this listing</h3>
+            <p className="mt-3 leading-7 whitespace-pre-line">
+              {display(
+                item.description,
+                "No description provided by the host."
+              )}
+            </p>
+
+            <div className="mt-8 text-xs text-black/50">
+              Posted {new Date(item.created_at).toLocaleDateString()}
+            </div>
+
+            <button className="mt-6 text-sm underline underline-offset-4 text-black/80">
               Report
             </button>
           </div>
 
+          {/* Right column: host / actions */}
           <aside className="bg-white rounded-2xl p-6 shadow">
             <div className="flex items-center gap-3">
               <img
@@ -163,6 +215,16 @@ export default function ListingDetails() {
           </aside>
         </section>
       </main>
+    </div>
+  );
+}
+
+/** Small label/value block used throughout */
+function Fact({ label, value }) {
+  return (
+    <div className="rounded-xl border border-black/5 p-3">
+      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
+      <div className="mt-1 font-semibold">{value}</div>
     </div>
   );
 }
