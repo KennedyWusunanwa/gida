@@ -26,19 +26,20 @@ export default function AdminSignIn() {
     }
 
     // Check user's role in profiles table
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", data.user.id)
-      .single();
+   const { data: profile, error: profileError } = await supabase
+  .from("profiles")
+  .select("is_admin")
+  .eq("id", data.user.id)
+  .single();
 
-    if (profileError || !profile) {
-      setErr("Unable to verify user role.");
-    } else if (profile.role === "admin") {
-      navigate("/admin");
-    } else {
-      setErr("You are not authorized to access the admin panel.");
-    }
+if (profileError || !profile) {
+  setErr("Unable to verify user role.");
+} else if (profile.is_admin === true) {
+  navigate("/admin"); // ✅ now works with AdminLayout
+} else {
+  setErr("You are not authorized to access the admin panel.");
+}
+
 
     setLoading(false);
   };
