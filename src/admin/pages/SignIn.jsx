@@ -6,35 +6,48 @@ export default function AdminSignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr(null);
+    setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
       setErr(error.message);
-    } else {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", data.user.id)
-        .single();
-
-      if (profile?.is_admin) {
-        navigate("/admin");
-      } else {
-        setErr("You are not authorized to access the admin panel.");
-      }
+      setLoading(false);
+      return;
     }
+
+    // Check user's role in profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      setErr("Unable to verify user role.");
+    } else if (profile.role === "admin") {
+      navigate("/admin");
+    } else {
+      setErr("You are not authorized to access the admin panel.");
+    }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F7F0E6] p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white rounded-xl shadow p-6 space-y-4">
-        <h1 className="text-2xl font-bold">Admin Sign In</h1>
+        <h1 className="text-2xl font-bold text-[#5B3A1E]">Admin Sign In</h1>
+
         <input
           type="email"
           placeholder="Admin email"
@@ -42,6 +55,7 @@ export default function AdminSignIn() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
         <input
           type="password"
           placeholder="Password"
@@ -49,9 +63,15 @@ export default function AdminSignIn() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
         {err && <p className="text-red-500 text-sm">{err}</p>}
-        <button type="submit" className="bg-[#5B3A1E] text-white px-4 py-2 rounded w-full">
-          Sign In
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-[#5B3A1E] text-white px-4 py-2 rounded w-full hover:opacity-90 disabled:opacity-60"
+        >
+          {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>
     </div>
