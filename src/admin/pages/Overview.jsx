@@ -2,27 +2,43 @@ import React, { useEffect, useState } from "react";
 import { fetchAdminOverview } from "../api";
 import { supabase } from "../../supabaseClient";
 
-
 export default function Overview() {
   const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAdminOverview().then(({ data, error }) => {
-      if (!error) setData(data?.[0] || null);
-    });
+    const loadData = async () => {
+      const {
+        data: overviewData,
+        error,
+      } = await fetchAdminOverview();
+
+      if (error) {
+        setErr("Failed to load admin overview.");
+      } else {
+        setData(overviewData?.[0] || null);
+      }
+
+      setLoading(false);
+    };
+
+    loadData();
   }, []);
 
-  if (!data) return <div>Loading…</div>;
+  if (loading) return <p className="text-black/60">Loading overview…</p>;
+  if (err) return <p className="text-red-600">{err}</p>;
+  if (!data) return <p className="text-black/60">No data available.</p>;
 
   const cards = [
-    { label: "Total Users", value: data.total_users },
-    { label: "Verified Users", value: data.verified_users },
-    { label: "Total Listings", value: data.total_listings },
-    { label: "Approved Listings", value: data.approved_listings },
-    { label: "Pending Listings", value: data.pending_listings },
-    { label: "Rejected Listings", value: data.rejected_listings },
-    { label: "New Users (30d)", value: data.last_30d_new_users },
-    { label: "New Listings (30d)", value: data.last_30d_new_listings },
+    { label: "Total Users", value: data.total_users ?? 0 },
+    { label: "Verified Users", value: data.verified_users ?? 0 },
+    { label: "Total Listings", value: data.total_listings ?? 0 },
+    { label: "Approved Listings", value: data.approved_listings ?? 0 },
+    { label: "Pending Listings", value: data.pending_listings ?? 0 },
+    { label: "Rejected Listings", value: data.rejected_listings ?? 0 },
+    { label: "New Users (30d)", value: data.last_30d_new_users ?? 0 },
+    { label: "New Listings (30d)", value: data.last_30d_new_listings ?? 0 },
   ];
 
   return (
