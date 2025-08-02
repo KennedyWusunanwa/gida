@@ -88,7 +88,7 @@ export default function ListingDetails() {
             <span className="font-extrabold text-xl">Gida</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/listings" className="hover:opacity-70">Find Room</Link>
+            <Link to="/listings" className="hover:opacity-70">Listings</Link>
             <Link to="/app/my-listings" className="hover:opacity-70">My Listings</Link>
             <Link to="/app/inbox" className="hover:opacity-70">Inbox</Link>
           </nav>
