@@ -16,7 +16,6 @@ const AMENITIES = ["Wi-Fi", "AC", "Washer", "Parking", "Kitchen"];
 export default function Listings() {
   const [params, setParams] = useSearchParams();
 
-  // form state, seeded from query params
   const [q, setQ] = useState(params.get("q") || params.get("city") || "");
   const [price, setPrice] = useState(params.get("price") || params.get("max") || "");
   const [amenity, setAmenity] = useState(params.get("amenity") || "");
@@ -26,7 +25,6 @@ export default function Listings() {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // build the URL search params on submit
   const onSearch = (e) => {
     e?.preventDefault?.();
     const next = new URLSearchParams();
@@ -37,7 +35,6 @@ export default function Listings() {
     setParams(next);
   };
 
-  // fetch listings whenever params change
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -46,7 +43,6 @@ export default function Listings() {
       let query = supabase
         .from("listings")
         .select(
-          // include optional columns if they exist; missing ones won’t break
           "id, title, city, location, price, price_ghs, image_url, property_type, room_type, gender_pref, amenities, is_published, created_at"
         )
         .eq("is_published", true)
@@ -56,26 +52,20 @@ export default function Listings() {
       const cityParam = params.get("q") || params.get("city");
       if (cityParam) query = query.ilike("city", `%${cityParam}%`);
 
-      // price range filter
       const priceParam = params.get("price") || params.get("max");
       if (priceParam) {
-        const [minStr, maxStr] = (priceParam || "").split("-");
+        const [minStr, maxStr] = priceParam.split("-");
         const min = minStr ? Number(minStr) : null;
         const max = maxStr ? Number(maxStr) : null;
-
-        // Use COALESCE(price, price_ghs) so either column works
         if (min !== null) query = query.gte("price", min).gte("price_ghs", min);
         if (max !== null) query = query.lte("price", max).lte("price_ghs", max);
       }
 
-      // amenity filter (amenities is text[] optionally)
       const amenityParam = params.get("amenity");
       if (amenityParam) {
-        // If you created an amenities text[] column, this will match rows containing the amenity
         query = query.contains?.("amenities", [amenityParam]) || query;
       }
 
-      // gender preference (optional column)
       const genderParam = params.get("gender");
       if (genderParam) {
         query = query.eq("gender_pref", genderParam);
@@ -98,7 +88,7 @@ export default function Listings() {
 
       return (
         <Link
-          to={`/listing/${item.id}`}
+          to={`/listings/${item.id}`} // ✅ Corrected path
           key={item.id}
           className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
         >
@@ -122,16 +112,16 @@ export default function Listings() {
             <h4 className="text-lg font-bold">{title}</h4>
             <div className="mt-2 text-sm text-[#3B2719] space-y-1">
               <div className="flex items-center gap-2">
-                <span className="i">🏠</span>
-                <span>{item.room_type || "Living room"}</span>
+                <span>🛏</span>
+                <span>{item.room_type || "Room"}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="i">🏢</span>
+                <span>🏢</span>
                 <span>{item.property_type || "Apartment"}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="i">👤</span>
-                <span>{item.gender_pref || "No"}</span>
+                <span>👤</span>
+                <span>{item.gender_pref || "No preference"}</span>
               </div>
             </div>
           </div>
@@ -142,7 +132,7 @@ export default function Listings() {
 
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
-      {/* Simple header like mock */}
+      {/* Header */}
       <header className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -157,7 +147,7 @@ export default function Listings() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        {/* Search row */}
+        {/* Search Form */}
         <form
           onSubmit={onSearch}
           className="bg-white rounded-2xl p-3 shadow flex flex-col md:flex-row gap-3"
@@ -176,7 +166,7 @@ export default function Listings() {
           </button>
         </form>
 
-        {/* Filters row */}
+        {/* Filters */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <select
             value={q}
@@ -222,7 +212,7 @@ export default function Listings() {
           </select>
         </div>
 
-        {/* Grid */}
+        {/* Listings Grid */}
         <section className="mt-6">
           {err && <p className="text-red-600">{err}</p>}
           {loading ? (
