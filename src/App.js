@@ -1,6 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+// Public pages
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
+import Listings from "./pages/Listings";
+import ListingDetail from "./pages/ListingDetail";
+
+// User dashboard pages
 import DashboardLayout from "./layouts/DashboardLayout";
 import MyListings from "./pages/MyListings";
 import AddListing from "./pages/AddListing";
@@ -9,17 +15,13 @@ import Inbox from "./pages/Inbox";
 import EditProfile from "./pages/EditProfile";
 import Protected from "./components/Protected";
 
-// Public pages
-import Listings from "./pages/Listings";
-import ListingDetail from "./pages/ListingDetail";
-
-// Admin pages
+// Admin dashboard pages
 import AdminLayout from "./admin/AdminLayout";
 import AdminOverview from "./admin/pages/Overview";
 import AdminUsers from "./admin/pages/Users";
 import AdminListings from "./admin/pages/Listings";
-import AdminSignIn from "./admin/pages/SignIn"; // ✅ Admin login page
-import AdminProtected from "./components/AdminProtected"; // ✅ Admin access wrapper
+import AdminSignIn from "./admin/pages/SignIn";
+import AdminProtected from "./components/AdminProtected";
 
 export default function App() {
   return (
@@ -29,7 +31,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
-        <Route path="/listing/:id" element={<ListingDetail />} />
+        <Route path="/listings/:id" element={<ListingDetail />} /> {/* ✅ Fixed path */}
+
         <Route path="/admin/signin" element={<AdminSignIn />} />
 
         {/* USER DASHBOARD */}
