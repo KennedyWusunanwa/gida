@@ -3,12 +3,12 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 
-
 export default function ListingDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [item, setItem] = useState(null);
+  const [hostProfile, setHostProfile] = useState(null);
   const [extraImages, setExtraImages] = useState([]);
   const [user, setUser] = useState(null);
   const [err, setErr] = useState(null);
@@ -19,37 +19,65 @@ export default function ListingDetails() {
       setLoading(true);
       setErr(null);
 
-      const { data, error } = await supabase
+      // 1) Get listing (include user_id so we can look up the host’s profile)
+      const { data: listing, error: listErr } = await supabase
         .from("listings")
         .select(
           [
-            "id", "title", "city", "location", "price", "price_ghs", "description",
-            "image_url", "property_type", "room_type", "gender_pref",
-            "lifestyle_pref", "pets_pref", "amenities", "host_name",
-            "host_avatar_url", "is_verified_host", "created_at"
+            "id",
+            "user_id",                 // 👈 IMPORTANT
+            "title",
+            "city",
+            "location",
+            "price",
+            "price_ghs",
+            "description",
+            "image_url",
+            "property_type",
+            "room_type",
+            "gender_pref",
+            "lifestyle_pref",
+            "pets_pref",
+            "amenities",
+            // legacy host columns (fallback)
+            "host_name",
+            "host_avatar_url",
+            "is_verified_host",
+            "created_at",
           ].join(", ")
         )
         .eq("id", id)
         .single();
 
-      if (error) {
-        setErr(error.message);
+      if (listErr) {
+        setErr(listErr.message);
         setLoading(false);
         return;
       }
+      setItem(listing);
 
-      setItem(data || null);
+      // 2) Host profile via user_id (if we have one)
+      if (listing?.user_id) {
+        const { data: profile, error: profErr } = await supabase
+          .from("profiles")
+          .select("full_name, avatar_url, is_verified")
+          .eq("id", listing.user_id)
+          .maybeSingle();
 
+        if (!profErr) setHostProfile(profile || null);
+      }
+
+      // 3) Extra images
       const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
         .eq("listing_id", id)
         .order("created_at", { ascending: true });
-
       setExtraImages(imgs || []);
 
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      // 4) Current viewer
+      const { data: auth } = await supabase.auth.getUser();
+      setUser(auth?.user ?? null);
 
       setLoading(false);
     };
@@ -63,14 +91,13 @@ export default function ListingDetails() {
       if (goLogin) navigate("/auth");
       return;
     }
-
     const { error } = await supabase.from("saved_listings").insert({
       user_id: user.id,
       listing_id: item.id,
     });
-
     if (error) {
-      alert("Failed to save listing.");
+      console.error(error);
+      alert(`Failed to save listing: ${error.message}`);
     } else {
       alert("Listing saved!");
     }
@@ -82,7 +109,25 @@ export default function ListingDetails() {
 
   const price = item.price ?? item.price_ghs;
   const title = item.title || `Room in ${item.city || item.location || ""}`;
-  const display = (v, fallback = "—") => (v === null || v === undefined || v === "" ? fallback : v);
+  const display = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : v;
+
+  // --- Host display values (profile first, then legacy listing fields, then placeholder)
+  const hostName =
+    hostProfile?.full_name ||
+    item.host_name ||
+    "Host";
+
+  const hostAvatar =
+    hostProfile?.avatar_url ||
+    item.host_avatar_url ||
+    // placeholder with initials
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(hostName || "Host")}`;
+
+  const isVerifiedHost =
+    (hostProfile?.is_verified ?? null) !== null
+      ? !!hostProfile?.is_verified
+      : !!item.is_verified_host;
 
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
@@ -121,7 +166,11 @@ export default function ListingDetails() {
         {/* Hero image */}
         <div className="mt-6 bg-white rounded-2xl overflow-hidden shadow">
           <img
-            src={item.image_url?.startsWith("http") ? item.image_url : item.image_url || "/images/placeholder.jpg"}
+            src={
+              item.image_url?.startsWith("http")
+                ? item.image_url
+                : item.image_url || "/images/placeholder.jpg"
+            }
             alt={title}
             className="w-full h-[380px] object-cover"
           />
@@ -136,8 +185,9 @@ export default function ListingDetails() {
           </div>
         )}
 
-        {/* Details */}
+        {/* Details + host card */}
         <section className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
+          {/* Left details */}
           <div className="bg-white rounded-2xl p-6 shadow">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Fact label="Room Type" value={display(item.room_type)} />
@@ -155,7 +205,9 @@ export default function ListingDetails() {
 
             <h3 className="mt-8 text-xl font-extrabold">Amenities</h3>
             <p className="mt-3 leading-7">
-              {Array.isArray(item.amenities) && item.amenities.length ? item.amenities.join(" · ") : "—"}
+              {Array.isArray(item.amenities) && item.amenities.length
+                ? item.amenities.join(" · ")
+                : "—"}
             </p>
 
             <h3 className="mt-8 text-2xl font-extrabold">About this listing</h3>
@@ -167,19 +219,22 @@ export default function ListingDetails() {
               Posted {new Date(item.created_at).toLocaleDateString()}
             </div>
 
-            <button className="mt-6 text-sm underline underline-offset-4 text-black/80">Report</button>
+            <button className="mt-6 text-sm underline underline-offset-4 text-black/80">
+              Report
+            </button>
           </div>
 
+          {/* Right: Host card */}
           <aside className="bg-white rounded-2xl p-6 shadow">
             <div className="flex items-center gap-3">
               <img
-                src={item.host_avatar_url || "https://api.dicebear.com/7.x/initials/svg?seed=Host"}
-                alt={item.host_name || "Host"}
+                src={hostAvatar}
+                alt={hostName}
                 className="h-10 w-10 rounded-full object-cover"
               />
               <div>
-                <div className="font-semibold">{item.host_name || "Host"}</div>
-                {item.is_verified_host && (
+                <div className="font-semibold">{hostName}</div>
+                {isVerifiedHost && (
                   <div className="text-xs text-emerald-700">Verified host</div>
                 )}
               </div>
