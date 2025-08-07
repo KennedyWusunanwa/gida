@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
+import { ensureUserHostConversation } from "../lib/createOrGetConversation";
 
 export default function ListingDetails() {
   const { id } = useParams();
@@ -18,11 +19,10 @@ export default function ListingDetails() {
       setLoading(true);
       setErr(null);
 
-      // 1) Get listing & host profile in one query
+      // NOTE: The profiles(...) embed requires FK: listings.user_id -> profiles.id
       const { data: listing, error: listErr } = await supabase
         .from("listings")
-        .select(
-          `
+        .select(`
           id,
           user_id,
           title,
@@ -47,8 +47,7 @@ export default function ListingDetails() {
             avatar_url,
             is_verified
           )
-        `
-        )
+        `)
         .eq("id", id)
         .single();
 
@@ -59,15 +58,14 @@ export default function ListingDetails() {
       }
       setItem(listing);
 
-      // 2) Extra images
       const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
         .eq("listing_id", id)
         .order("created_at", { ascending: true });
+
       setExtraImages(imgs || []);
 
-      // 3) Current viewer
       const { data: auth } = await supabase.auth.getUser();
       setUser(auth?.user ?? null);
 
@@ -79,7 +77,9 @@ export default function ListingDetails() {
 
   const handleSave = async () => {
     if (!user) {
-      const goLogin = window.confirm("You must be logged in to save listings. Go to login?");
+      const goLogin = window.confirm(
+        "You must be logged in to save listings. Go to login?"
+      );
       if (goLogin) navigate("/auth");
       return;
     }
@@ -95,6 +95,35 @@ export default function ListingDetails() {
     }
   };
 
+  const onClickMessage = async () => {
+    if (!user) {
+      if (
+        window.confirm(
+          "You must be logged in to message hosts. Go to login?"
+        )
+      ) {
+        navigate("/auth");
+      }
+      return;
+    }
+    const hostId = item?.user_id;
+    if (!hostId) {
+      alert("This listing has no host linked yet.");
+      return;
+    }
+    try {
+      const convoId = await ensureUserHostConversation(
+        item.id,
+        user.id,
+        hostId
+      );
+      navigate(`/app/inbox?c=${convoId}`);
+    } catch (e) {
+      console.error(e);
+      alert("Could not start the chat. Please try again.");
+    }
+  };
+
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (!item) return <div className="p-6">Not found.</div>;
@@ -104,17 +133,14 @@ export default function ListingDetails() {
   const display = (v, fallback = "—") =>
     v === null || v === undefined || v === "" ? fallback : v;
 
-  // --- Host display values (profile first, then legacy listing fields, then placeholder)
-  const hostName =
-    item.profiles?.full_name ||
-    item.host_name ||
-    "Host";
-
+  // Prefer profile fields; fall back to legacy listing fields; else placeholder
+  const hostName = item.profiles?.full_name || item.host_name || "Host";
   const hostAvatar =
     item.profiles?.avatar_url ||
     item.host_avatar_url ||
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(hostName || "Host")}`;
-
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+      hostName || "Host"
+    )}`;
   const isVerifiedHost =
     (item.profiles?.is_verified ?? null) !== null
       ? !!item.profiles?.is_verified
@@ -130,9 +156,15 @@ export default function ListingDetails() {
             <span className="font-extrabold text-xl">Gida</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/listings" className="hover:opacity-70">Listings</Link>
-            <Link to="/app/my-listings" className="hover:opacity-70">My Listings</Link>
-            <Link to="/app/inbox" className="hover:opacity-70">Inbox</Link>
+            <Link to="/listings" className="hover:opacity-70">
+              Listings
+            </Link>
+            <Link to="/app/my-listings" className="hover:opacity-70">
+              My Listings
+            </Link>
+            <Link to="/app/inbox" className="hover:opacity-70">
+              Inbox
+            </Link>
           </nav>
         </div>
       </header>
@@ -144,12 +176,18 @@ export default function ListingDetails() {
             {price != null && (
               <div className="text-2xl md:text-3xl font-extrabold text-[#5B3A1E]">
                 GH₵{Number(price).toLocaleString()}
-                <span className="text-base font-semibold text-[#2A1E14]"> / month</span>
+                <span className="text-base font-semibold text-[#2A1E14]">
+                  {" "}
+                  / month
+                </span>
               </div>
             )}
-            <h1 className="mt-1 text-4xl md:text-5xl font-extrabold">{title}</h1>
+            <h1 className="mt-1 text-4xl md:text-5xl font-extrabold">
+              {title}
+            </h1>
             <p className="mt-1 text-black/70">
-              {display(item.location)}{item.city ? `, ${item.city}` : ""}
+              {display(item.location)}
+              {item.city ? `, ${item.city}` : ""}
             </p>
           </div>
         </div>
@@ -171,7 +209,12 @@ export default function ListingDetails() {
         {extraImages.length > 0 && (
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {extraImages.map((img) => (
-              <img key={img.id} src={img.url} alt="Listing extra" className="w-full h-32 object-cover rounded-lg" />
+              <img
+                key={img.id}
+                src={img.url}
+                alt="Listing extra"
+                className="w-full h-32 object-cover rounded-lg"
+              />
             ))}
           </div>
         )}
@@ -190,8 +233,14 @@ export default function ListingDetails() {
             <h3 className="mt-8 text-xl font-extrabold">Roommate Preferences</h3>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Fact label="Gender" value={display(item.gender_pref, "Any")} />
-              <Fact label="Lifestyle" value={display(item.lifestyle_pref, "Any")} />
-              <Fact label="Pets" value={display(item.pets_pref, "No preference")} />
+              <Fact
+                label="Lifestyle"
+                value={display(item.lifestyle_pref, "Any")}
+              />
+              <Fact
+                label="Pets"
+                value={display(item.pets_pref, "No preference")}
+              />
             </div>
 
             <h3 className="mt-8 text-xl font-extrabold">Amenities</h3>
@@ -232,7 +281,10 @@ export default function ListingDetails() {
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <button className="rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95">
+              <button
+                onClick={onClickMessage}
+                className="rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95"
+              >
                 Message
               </button>
               <button
@@ -252,7 +304,9 @@ export default function ListingDetails() {
 function Fact({ label, value }) {
   return (
     <div className="rounded-xl border border-black/5 p-3">
-      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-black/50">
+        {label}
+      </div>
       <div className="mt-1 font-semibold">{value}</div>
     </div>
   );
