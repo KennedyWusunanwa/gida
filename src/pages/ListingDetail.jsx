@@ -1,46 +1,31 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 
 export default function ListingDetails() {
   const { id } = useParams();
+  const navigate = useNavigate();
+
   const [item, setItem] = useState(null);
   const [extraImages, setExtraImages] = useState([]);
+  const [user, setUser] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setErr(null);
 
-      // 1) Main listing (include all fields we want to display)
       const { data, error } = await supabase
         .from("listings")
         .select(
           [
-            "id",
-            "title",
-            "city",
-            "location",
-            "price",
-            "price_ghs",
-            "description",
-            "image_url",
-            // property basics
-            "property_type",
-            "room_type",
-            // roommate prefs (make sure you add these columns when you’re ready)
-            "gender_pref",
-            "lifestyle_pref",
-            "pets_pref",
-            // misc
-            "amenities",
-            "host_name",
-            "host_avatar_url",
-            "is_verified_host",
-            "created_at",
+            "id", "title", "city", "location", "price", "price_ghs", "description",
+            "image_url", "property_type", "room_type", "gender_pref",
+            "lifestyle_pref", "pets_pref", "amenities", "host_name",
+            "host_avatar_url", "is_verified_host", "created_at"
           ].join(", ")
         )
         .eq("id", id)
@@ -51,21 +36,44 @@ export default function ListingDetails() {
         setLoading(false);
         return;
       }
+
       setItem(data || null);
 
-      // 2) Extra images (gallery)
-      const { data: imgs, error: imgErr } = await supabase
+      const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
         .eq("listing_id", id)
         .order("created_at", { ascending: true });
 
-      if (!imgErr) setExtraImages(imgs || []);
+      setExtraImages(imgs || []);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+
       setLoading(false);
     };
 
-    load();
+    fetchData();
   }, [id]);
+
+  const handleSave = async () => {
+    if (!user) {
+      const goLogin = window.confirm("You must be logged in to save listings. Go to login?");
+      if (goLogin) navigate("/auth");
+      return;
+    }
+
+    const { error } = await supabase.from("saved_listings").insert({
+      user_id: user.id,
+      listing_id: item.id,
+    });
+
+    if (error) {
+      alert("Failed to save listing.");
+    } else {
+      alert("Listing saved!");
+    }
+  };
 
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;
@@ -73,10 +81,7 @@ export default function ListingDetails() {
 
   const price = item.price ?? item.price_ghs;
   const title = item.title || `Room in ${item.city || item.location || ""}`;
-
-  // Helper to print “—” when empty
-  const display = (v, fallback = "—") =>
-    v === null || v === undefined || v === "" ? fallback : v;
+  const display = (v, fallback = "—") => (v === null || v === undefined || v === "" ? fallback : v);
 
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
@@ -101,8 +106,8 @@ export default function ListingDetails() {
           <div>
             {price != null && (
               <div className="text-2xl md:text-3xl font-extrabold text-[#5B3A1E]">
-                GH₵{Number(price).toLocaleString()}{" "}
-                <span className="text-base font-semibold text-[#2A1E14]">/ month</span>
+                GH₵{Number(price).toLocaleString()}
+                <span className="text-base font-semibold text-[#2A1E14]"> / month</span>
               </div>
             )}
             <h1 className="mt-1 text-4xl md:text-5xl font-extrabold">{title}</h1>
@@ -115,43 +120,31 @@ export default function ListingDetails() {
         {/* Hero image */}
         <div className="mt-6 bg-white rounded-2xl overflow-hidden shadow">
           <img
-            src={
-              item.image_url?.startsWith("http")
-                ? item.image_url
-                : item.image_url || "/images/placeholder.jpg"
-            }
+            src={item.image_url?.startsWith("http") ? item.image_url : item.image_url || "/images/placeholder.jpg"}
             alt={title}
             className="w-full h-[380px] object-cover"
           />
         </div>
 
-        {/* Extra images grid */}
+        {/* Extra images */}
         {extraImages.length > 0 && (
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {extraImages.map((img) => (
-              <img
-                key={img.id}
-                src={img.url}
-                alt="Listing extra"
-                className="w-full h-32 object-cover rounded-lg"
-              />
+              <img key={img.id} src={img.url} alt="Listing extra" className="w-full h-32 object-cover rounded-lg" />
             ))}
           </div>
         )}
 
-        {/* Details + host card */}
+        {/* Details */}
         <section className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
-          {/* Left column: all attributes user entered */}
           <div className="bg-white rounded-2xl p-6 shadow">
-            {/* Quick facts */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Fact label="Room Type" value={display(item.room_type, "—")} />
-              <Fact label="Property Type" value={display(item.property_type, "—")} />
-              <Fact label="Location" value={display(item.location, "—")} />
-              <Fact label="City" value={display(item.city, "—")} />
+              <Fact label="Room Type" value={display(item.room_type)} />
+              <Fact label="Property Type" value={display(item.property_type)} />
+              <Fact label="Location" value={display(item.location)} />
+              <Fact label="City" value={display(item.city)} />
             </div>
 
-            {/* Roommate preferences */}
             <h3 className="mt-8 text-xl font-extrabold">Roommate Preferences</h3>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Fact label="Gender" value={display(item.gender_pref, "Any")} />
@@ -159,40 +152,27 @@ export default function ListingDetails() {
               <Fact label="Pets" value={display(item.pets_pref, "No preference")} />
             </div>
 
-            {/* Amenities */}
             <h3 className="mt-8 text-xl font-extrabold">Amenities</h3>
             <p className="mt-3 leading-7">
-              {Array.isArray(item.amenities) && item.amenities.length
-                ? item.amenities.join(" · ")
-                : "—"}
+              {Array.isArray(item.amenities) && item.amenities.length ? item.amenities.join(" · ") : "—"}
             </p>
 
-            {/* Description */}
             <h3 className="mt-8 text-2xl font-extrabold">About this listing</h3>
             <p className="mt-3 leading-7 whitespace-pre-line">
-              {display(
-                item.description,
-                "No description provided by the host."
-              )}
+              {display(item.description, "No description provided by the host.")}
             </p>
 
             <div className="mt-8 text-xs text-black/50">
               Posted {new Date(item.created_at).toLocaleDateString()}
             </div>
 
-            <button className="mt-6 text-sm underline underline-offset-4 text-black/80">
-              Report
-            </button>
+            <button className="mt-6 text-sm underline underline-offset-4 text-black/80">Report</button>
           </div>
 
-          {/* Right column: host / actions */}
           <aside className="bg-white rounded-2xl p-6 shadow">
             <div className="flex items-center gap-3">
               <img
-                src={
-                  item.host_avatar_url ||
-                  "https://api.dicebear.com/7.x/initials/svg?seed=Host"
-                }
+                src={item.host_avatar_url || "https://api.dicebear.com/7.x/initials/svg?seed=Host"}
                 alt={item.host_name || "Host"}
                 className="h-10 w-10 rounded-full object-cover"
               />
@@ -208,7 +188,10 @@ export default function ListingDetails() {
               <button className="rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95">
                 Message
               </button>
-              <button className="rounded-xl border border-black/10 py-3 font-semibold hover:bg-black/5">
+              <button
+                onClick={handleSave}
+                className="rounded-xl border border-black/10 py-3 font-semibold hover:bg-black/5"
+              >
                 Save
               </button>
             </div>
@@ -219,7 +202,6 @@ export default function ListingDetails() {
   );
 }
 
-/** Small label/value block used throughout */
 function Fact({ label, value }) {
   return (
     <div className="rounded-xl border border-black/5 p-3">
