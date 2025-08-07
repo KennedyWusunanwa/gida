@@ -12,7 +12,7 @@ export default function Inbox() {
   const [convos, setConvos] = useState([]); // [{ id,type,listing_id,created_at, participants:[{user_id, profiles:{...}}] }]
   const [loadingConvos, setLoadingConvos] = useState(true);
 
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]); // [{... , profiles: {id, full_name, avatar_url}}]
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   const [text, setText] = useState("");
@@ -20,23 +20,25 @@ export default function Inbox() {
 
   const bottomRef = useRef(null);
 
-  // Load viewer
+  // Load signed-in user
   useEffect(() => {
     let mounted = true;
     supabase.auth.getUser().then(({ data }) => {
       if (mounted) setUser(data?.user ?? null);
     });
-    return () => (mounted = false);
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Load conversations for this user, then load participants for them
+  // Load conversations for this user, then load participants and hydrate profiles (no FK required)
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
     (async () => {
       setLoadingConvos(true);
-      // 1) Get conversations where current user is a participant
+      // Get conversations where current user is a participant
       const { data: convs, error: convErr } = await supabase
         .from("conversations")
         .select(
@@ -53,8 +55,10 @@ export default function Inbox() {
 
       if (convErr) {
         console.error(convErr);
-        if (!cancelled) setConvos([]);
-        setLoadingConvos(false);
+        if (!cancelled) {
+          setConvos([]);
+          setLoadingConvos(false);
+        }
         return;
       }
 
@@ -68,20 +72,10 @@ export default function Inbox() {
         return;
       }
 
-      // 2) Fetch ALL participants (with profiles) for these conversations
+      // Fetch ALL participants (without embedded profiles)
       const { data: parts, error: partErr } = await supabase
         .from("conversation_participants")
-        .select(
-          `
-          conversation_id,
-          user_id,
-          profiles (
-            id,
-            full_name,
-            avatar_url
-          )
-        `
-        )
+        .select("conversation_id, user_id")
         .in("conversation_id", ids);
 
       if (partErr) {
@@ -91,12 +85,29 @@ export default function Inbox() {
         return;
       }
 
-      // 3) Glue participants onto conversations
+      // Fetch the profiles for those user_ids separately
+      const userIds = Array.from(new Set((parts || []).map((p) => p.user_id)));
+      let profileMap = new Map();
+      if (userIds.length) {
+        const { data: profs, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", userIds);
+
+        if (profErr) console.error(profErr);
+        profileMap = new Map((profs || []).map((p) => [p.id, p]));
+      }
+
+      // Glue participants + their profile onto the conversational list
       const byConv = new Map();
       for (const c of list) byConv.set(c.id, { ...c, participants: [] });
       for (const p of parts || []) {
         const row = byConv.get(p.conversation_id);
-        if (row) row.participants.push(p);
+        if (!row) continue;
+        row.participants.push({
+          ...p,
+          profiles: profileMap.get(p.user_id) || null,
+        });
       }
 
       if (!cancelled) {
@@ -119,7 +130,7 @@ export default function Inbox() {
     (async () => {
       setLoadingMsgs(true);
 
-      // Ensure the user belongs to this conversation (server will also enforce via RLS)
+      // Ensure the user belongs to this conversation (RLS will also enforce)
       if (user?.id) {
         const { data: membership, error: memErr } = await supabase
           .from("conversation_participants")
@@ -139,23 +150,10 @@ export default function Inbox() {
         }
       }
 
-      // Messages with sender profile
+      // Fetch raw messages first (no embeds)
       const { data: msgs, error: msgErr } = await supabase
         .from("messages")
-        .select(
-          `
-          id,
-          conversation_id,
-          sender_id,
-          body,
-          created_at,
-          profiles:profiles!messages_sender_id_fkey(
-            id,
-            full_name,
-            avatar_url
-          )
-        `
-        )
+        .select("id, conversation_id, sender_id, body, created_at")
         .eq("conversation_id", activeId)
         .order("created_at", { ascending: true });
 
@@ -168,12 +166,29 @@ export default function Inbox() {
         return;
       }
 
+      // Hydrate sender profiles in one go
+      const senderIds = Array.from(new Set((msgs || []).map((m) => m.sender_id)));
+      let senderMap = new Map();
+      if (senderIds.length) {
+        const { data: senders, error: sendErr } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .in("id", senderIds);
+        if (sendErr) console.error(sendErr);
+        senderMap = new Map((senders || []).map((p) => [p.id, p]));
+      }
+
+      const hydrated = (msgs || []).map((m) => ({
+        ...m,
+        profiles: senderMap.get(m.sender_id) || null,
+      }));
+
       if (!cancelled) {
-        setMessages(msgs || []);
+        setMessages(hydrated);
         setLoadingMsgs(false);
       }
 
-      // Realtime: new messages in this conversation
+      // Realtime subscription: on new message, fetch the sender profile and append
       channel = supabase
         .channel(`chat:${activeId}`)
         .on(
@@ -186,17 +201,13 @@ export default function Inbox() {
           },
           async (payload) => {
             const m = payload.new;
-            // get sender profile for the realtime row
             const { data: prof } = await supabase
               .from("profiles")
               .select("id, full_name, avatar_url")
               .eq("id", m.sender_id)
               .maybeSingle();
 
-            setMessages((prev) => [
-              ...prev,
-              { ...m, profiles: prof || null },
-            ]);
+            setMessages((prev) => [...prev, { ...m, profiles: prof || null }]);
           }
         )
         .subscribe();
@@ -227,11 +238,9 @@ export default function Inbox() {
     activeOther?.full_name || (activeId ? "Conversation" : "Select a conversation");
   const headerAvatar =
     activeOther?.avatar_url ||
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-      headerName
-    )}`;
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(headerName)}`;
 
-  // Sidebar list items with other party info
+  // Sidebar list items with "other party" info
   const sidebarItems = useMemo(() => {
     return convos.map((c) => {
       let other = null;
@@ -244,9 +253,7 @@ export default function Inbox() {
       const name = other?.full_name || (c.type === "support" ? "Gida Support" : "Chat");
       const avatar =
         other?.avatar_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-          name
-        )}`;
+        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
       return { id: c.id, name, avatar, created_at: c.created_at };
     });
   }, [convos, user?.id]);
@@ -332,9 +339,7 @@ export default function Inbox() {
                 className="h-8 w-8 rounded-full object-cover"
               />
             )}
-            <div className="text-lg font-bold">
-              {headerName}
-            </div>
+            <div className="text-lg font-bold">{headerName}</div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -352,13 +357,18 @@ export default function Inbox() {
                     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
                       name
                     )}`;
+
                   return (
                     <div
                       key={m.id}
                       className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                        mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1]"
+                        mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1] text-black"
                       }`}
                     >
+                      {/* Name + (optional) tiny avatar for clarity */}
+                      <div className={`mb-1 text-xs font-semibold ${mine ? "opacity-90" : "opacity-70"}`}>
+                        {name}
+                      </div>
                       <div className="whitespace-pre-wrap">{m.body}</div>
                       <div
                         className={`mt-1 text-[10px] ${
