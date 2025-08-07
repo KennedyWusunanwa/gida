@@ -1,8 +1,21 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 import { ensureUserHostConversation } from "../lib/createOrGetConversation";
+
+/**
+ * ListingDetails
+ * - Always shows the *real* host name & avatar when available (even for signed-out users),
+ *   falling back to legacy listing fields, then initials avatar.
+ * - Message button:
+ *     • prompts login if needed
+ *     • prevents messaging yourself
+ *     • creates/gets conversation and navigates to inbox with a valid convo id
+ *     • shows clear error if something fails
+ * - Save button:
+ *     • requires login and saves listing to the user's saved_listings
+ */
 
 export default function ListingDetails() {
   const { id } = useParams();
@@ -10,19 +23,24 @@ export default function ListingDetails() {
 
   const [item, setItem] = useState(null);
   const [extraImages, setExtraImages] = useState([]);
-  const [user, setUser] = useState(null);
+  const [viewer, setViewer] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [messaging, setMessaging] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
       setLoading(true);
       setErr(null);
 
-      // NOTE: The profiles(...) embed requires FK: listings.user_id -> profiles.id
+      // 1) Get listing + (embedded) host profile if FK is set: listings.user_id -> profiles.id
       const { data: listing, error: listErr } = await supabase
         .from("listings")
-        .select(`
+        .select(
+          `
           id,
           user_id,
           title,
@@ -42,61 +60,130 @@ export default function ListingDetails() {
           host_avatar_url,
           is_verified_host,
           created_at,
-          profiles (
+          profiles:profiles!listings_user_id_fkey (
+            id,
             full_name,
             avatar_url,
             is_verified
           )
-        `)
+        `
+        )
         .eq("id", id)
         .single();
 
       if (listErr) {
-        setErr(listErr.message);
-        setLoading(false);
+        if (!cancelled) {
+          setErr(listErr.message || "Failed to load listing.");
+          setLoading(false);
+        }
         return;
       }
-      setItem(listing);
 
+      // 2) If the embed returned null (because FK alias differs or RLS), try a direct fetch
+      let hostProfile = listing?.profiles || null;
+      if (!hostProfile && listing?.user_id) {
+        const { data: prof, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url, is_verified")
+          .eq("id", listing.user_id)
+          .maybeSingle();
+
+        if (!profErr) {
+          hostProfile = prof;
+        }
+      }
+
+      const listingWithProfile = { ...listing, profiles: hostProfile };
+
+      // 3) Extra images (optional)
       const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
         .eq("listing_id", id)
         .order("created_at", { ascending: true });
 
-      setExtraImages(imgs || []);
-
+      // 4) Viewer (may be null)
       const { data: auth } = await supabase.auth.getUser();
-      setUser(auth?.user ?? null);
 
-      setLoading(false);
+      if (!cancelled) {
+        setItem(listingWithProfile);
+        setExtraImages(imgs || []);
+        setViewer(auth?.user ?? null);
+        setLoading(false);
+      }
     };
 
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
+  // ---------- Derived host display ----------
+  const derivedHost = useMemo(() => {
+    const fallbackName =
+      item?.host_name ||
+      (item?.profiles?.full_name ? null : "Host"); // use "Host" only if we truly have nothing
+    const name = item?.profiles?.full_name || item?.host_name || fallbackName || "Host";
+
+    const initialsUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+      name || "Host"
+    )}`;
+    const avatar =
+      item?.profiles?.avatar_url ||
+      item?.host_avatar_url ||
+      initialsUrl;
+
+    const verified =
+      (item?.profiles?.is_verified ?? null) !== null
+        ? !!item?.profiles?.is_verified
+        : !!item?.is_verified_host;
+
+    return { name, avatar, verified };
+  }, [item]);
+
+  // ---------- UI helpers ----------
+  const display = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : v;
+
+  const price = item?.price ?? item?.price_ghs;
+  const title = item?.title || `Room in ${item?.city || item?.location || ""}`;
+
+  // ---------- Actions ----------
   const handleSave = async () => {
-    if (!user) {
+    if (!viewer) {
       const goLogin = window.confirm(
         "You must be logged in to save listings. Go to login?"
       );
       if (goLogin) navigate("/auth");
       return;
     }
-    const { error } = await supabase.from("saved_listings").insert({
-      user_id: user.id,
-      listing_id: item.id,
-    });
-    if (error) {
-      console.error(error);
-      alert(`Failed to save listing: ${error.message}`);
-    } else {
-      alert("Listing saved!");
+    if (!item?.id) return;
+
+    try {
+      setSaving(true);
+      const { error } = await supabase.from("saved_listings").insert({
+        user_id: viewer.id,
+        listing_id: item.id,
+      });
+      if (error) {
+        console.error(error);
+        alert(`Failed to save listing: ${error.message}`);
+      } else {
+        alert("Listing saved!");
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
   const onClickMessage = async () => {
-    if (!user) {
+    if (!item?.id) {
+      alert("This listing is not available yet. Please refresh and try again.");
+      return;
+    }
+    // Require login for messaging
+    if (!viewer) {
       if (
         window.confirm(
           "You must be logged in to message hosts. Go to login?"
@@ -106,45 +193,45 @@ export default function ListingDetails() {
       }
       return;
     }
+
     const hostId = item?.user_id;
     if (!hostId) {
       alert("This listing has no host linked yet.");
       return;
     }
+    if (viewer.id === hostId) {
+      alert("You can’t message yourself about your own listing.");
+      return;
+    }
+
     try {
-      const convoId = await ensureUserHostConversation(
-        item.id,
-        user.id,
-        hostId
-      );
-      navigate(`/app/inbox?c=${convoId}`);
+      setMessaging(true);
+
+      // Make sure ensureUserHostConversation can accept (listingId, guestId, hostId)
+      // and returns either a string id or an object with { id }.
+      const convo = await ensureUserHostConversation(item.id, viewer.id, hostId);
+
+      const convoId =
+        (typeof convo === "string" && convo) ||
+        (convo && (convo.id || convo.conversation_id));
+
+      if (!convoId) {
+        throw new Error("No conversation id returned.");
+      }
+
+      navigate(`/app/inbox?c=${encodeURIComponent(convoId)}`);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to start chat:", e);
       alert("Could not start the chat. Please try again.");
+    } finally {
+      setMessaging(false);
     }
   };
 
+  // ---------- Render ----------
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (!item) return <div className="p-6">Not found.</div>;
-
-  const price = item.price ?? item.price_ghs;
-  const title = item.title || `Room in ${item.city || item.location || ""}`;
-  const display = (v, fallback = "—") =>
-    v === null || v === undefined || v === "" ? fallback : v;
-
-  // Prefer profile fields; fall back to legacy listing fields; else placeholder
-  const hostName = item.profiles?.full_name || item.host_name || "Host";
-  const hostAvatar =
-    item.profiles?.avatar_url ||
-    item.host_avatar_url ||
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-      hostName || "Host"
-    )}`;
-  const isVerifiedHost =
-    (item.profiles?.is_verified ?? null) !== null
-      ? !!item.profiles?.is_verified
-      : !!item.is_verified_host;
 
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
@@ -196,7 +283,7 @@ export default function ListingDetails() {
         <div className="mt-6 bg-white rounded-2xl overflow-hidden shadow">
           <img
             src={
-              item.image_url?.startsWith("http")
+              item.image_url?.startsWith?.("http")
                 ? item.image_url
                 : item.image_url || "/images/placeholder.jpg"
             }
@@ -268,13 +355,15 @@ export default function ListingDetails() {
           <aside className="bg-white rounded-2xl p-6 shadow">
             <div className="flex items-center gap-3">
               <img
-                src={hostAvatar}
-                alt={hostName}
+                src={derivedHost.avatar}
+                alt={derivedHost.name}
                 className="h-10 w-10 rounded-full object-cover"
               />
               <div>
-                <div className="font-semibold">{hostName}</div>
-                {isVerifiedHost && (
+                <div className="font-semibold">
+                  {derivedHost.name || "Host"}
+                </div>
+                {derivedHost.verified && (
                   <div className="text-xs text-emerald-700">Verified host</div>
                 )}
               </div>
@@ -283,15 +372,18 @@ export default function ListingDetails() {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
                 onClick={onClickMessage}
-                className="rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95"
+                disabled={messaging}
+                className="rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95 disabled:opacity-60"
+                title={!viewer ? "Sign in to message" : "Message host"}
               >
-                Message
+                {messaging ? "Starting chat…" : "Message"}
               </button>
               <button
                 onClick={handleSave}
-                className="rounded-xl border border-black/10 py-3 font-semibold hover:bg-black/5"
+                disabled={saving}
+                className="rounded-xl border border-black/10 py-3 font-semibold hover:bg-black/5 disabled:opacity-60"
               >
-                Save
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
           </aside>
