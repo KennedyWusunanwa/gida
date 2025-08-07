@@ -4,19 +4,6 @@ import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 import { ensureUserHostConversation } from "../lib/createOrGetConversation";
 
-/**
- * ListingDetails
- * - Always shows the *real* host name & avatar when available (even for signed-out users),
- *   falling back to legacy listing fields, then initials avatar.
- * - Message button:
- *     • prompts login if needed
- *     • prevents messaging yourself
- *     • creates/gets conversation and navigates to inbox with a valid convo id
- *     • shows clear error if something fails
- * - Save button:
- *     • requires login and saves listing to the user's saved_listings
- */
-
 export default function ListingDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -36,38 +23,14 @@ export default function ListingDetails() {
       setLoading(true);
       setErr(null);
 
-      // 1) Get listing + (embedded) host profile if FK is set: listings.user_id -> profiles.id
+      // 1) Get listing (no FK join, fallback to separate profile fetch)
       const { data: listing, error: listErr } = await supabase
         .from("listings")
-        .select(
-          `
-          id,
-          user_id,
-          title,
-          city,
-          location,
-          price,
-          price_ghs,
-          description,
-          image_url,
-          property_type,
-          room_type,
-          gender_pref,
-          lifestyle_pref,
-          pets_pref,
-          amenities,
-          host_name,
-          host_avatar_url,
-          is_verified_host,
-          created_at,
-          profiles:profiles!listings_user_id_fkey (
-            id,
-            full_name,
-            avatar_url,
-            is_verified
-          )
-        `
-        )
+        .select(`
+          id, user_id, title, city, location, price, price_ghs, description,
+          image_url, property_type, room_type, gender_pref, lifestyle_pref,
+          pets_pref, amenities, host_name, host_avatar_url, is_verified_host, created_at
+        `)
         .eq("id", id)
         .single();
 
@@ -79,30 +42,27 @@ export default function ListingDetails() {
         return;
       }
 
-      // 2) If the embed returned null (because FK alias differs or RLS), try a direct fetch
-      let hostProfile = listing?.profiles || null;
-      if (!hostProfile && listing?.user_id) {
-        const { data: prof, error: profErr } = await supabase
+      // 2) Try fetching host profile separately
+      let hostProfile = null;
+      if (listing?.user_id) {
+        const { data: prof } = await supabase
           .from("profiles")
           .select("id, full_name, avatar_url, is_verified")
           .eq("id", listing.user_id)
           .maybeSingle();
-
-        if (!profErr) {
-          hostProfile = prof;
-        }
+        hostProfile = prof || null;
       }
 
       const listingWithProfile = { ...listing, profiles: hostProfile };
 
-      // 3) Extra images (optional)
+      // 3) Extra images
       const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
         .eq("listing_id", id)
         .order("created_at", { ascending: true });
 
-      // 4) Viewer (may be null)
+      // 4) Viewer (logged in user, if any)
       const { data: auth } = await supabase.auth.getUser();
 
       if (!cancelled) {
@@ -119,12 +79,16 @@ export default function ListingDetails() {
     };
   }, [id]);
 
-  // ---------- Derived host display ----------
+  // Host display info
   const derivedHost = useMemo(() => {
     const fallbackName =
       item?.host_name ||
-      (item?.profiles?.full_name ? null : "Host"); // use "Host" only if we truly have nothing
-    const name = item?.profiles?.full_name || item?.host_name || fallbackName || "Host";
+      (item?.profiles?.full_name ? null : "Host");
+    const name =
+      item?.profiles?.full_name ||
+      item?.host_name ||
+      fallbackName ||
+      "Host";
 
     const initialsUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
       name || "Host"
@@ -142,14 +106,13 @@ export default function ListingDetails() {
     return { name, avatar, verified };
   }, [item]);
 
-  // ---------- UI helpers ----------
   const display = (v, fallback = "—") =>
     v === null || v === undefined || v === "" ? fallback : v;
 
   const price = item?.price ?? item?.price_ghs;
   const title = item?.title || `Room in ${item?.city || item?.location || ""}`;
 
-  // ---------- Actions ----------
+  // Save listing
   const handleSave = async () => {
     if (!viewer) {
       const goLogin = window.confirm(
@@ -177,12 +140,12 @@ export default function ListingDetails() {
     }
   };
 
+  // Start messaging
   const onClickMessage = async () => {
     if (!item?.id) {
       alert("This listing is not available yet. Please refresh and try again.");
       return;
     }
-    // Require login for messaging
     if (!viewer) {
       if (
         window.confirm(
@@ -206,19 +169,15 @@ export default function ListingDetails() {
 
     try {
       setMessaging(true);
-
-      // Make sure ensureUserHostConversation can accept (listingId, guestId, hostId)
-      // and returns either a string id or an object with { id }.
-      const convo = await ensureUserHostConversation(item.id, viewer.id, hostId);
-
+      const convo = await ensureUserHostConversation(
+        item.id,
+        viewer.id,
+        hostId
+      );
       const convoId =
         (typeof convo === "string" && convo) ||
         (convo && (convo.id || convo.conversation_id));
-
-      if (!convoId) {
-        throw new Error("No conversation id returned.");
-      }
-
+      if (!convoId) throw new Error("No conversation id returned.");
       navigate(`/app/inbox?c=${encodeURIComponent(convoId)}`);
     } catch (e) {
       console.error("Failed to start chat:", e);
@@ -228,7 +187,6 @@ export default function ListingDetails() {
     }
   };
 
-  // ---------- Render ----------
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (!item) return <div className="p-6">Not found.</div>;
@@ -320,14 +278,8 @@ export default function ListingDetails() {
             <h3 className="mt-8 text-xl font-extrabold">Roommate Preferences</h3>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Fact label="Gender" value={display(item.gender_pref, "Any")} />
-              <Fact
-                label="Lifestyle"
-                value={display(item.lifestyle_pref, "Any")}
-              />
-              <Fact
-                label="Pets"
-                value={display(item.pets_pref, "No preference")}
-              />
+              <Fact label="Lifestyle" value={display(item.lifestyle_pref, "Any")} />
+              <Fact label="Pets" value={display(item.pets_pref, "No preference")} />
             </div>
 
             <h3 className="mt-8 text-xl font-extrabold">Amenities</h3>
@@ -360,9 +312,7 @@ export default function ListingDetails() {
                 className="h-10 w-10 rounded-full object-cover"
               />
               <div>
-                <div className="font-semibold">
-                  {derivedHost.name || "Host"}
-                </div>
+                <div className="font-semibold">{derivedHost.name || "Host"}</div>
                 {derivedHost.verified && (
                   <div className="text-xs text-emerald-700">Verified host</div>
                 )}
@@ -396,9 +346,7 @@ export default function ListingDetails() {
 function Fact({ label, value }) {
   return (
     <div className="rounded-xl border border-black/5 p-3">
-      <div className="text-xs uppercase tracking-wide text-black/50">
-        {label}
-      </div>
+      <div className="text-xs uppercase tracking-wide text-black/50">{label}</div>
       <div className="mt-1 font-semibold">{value}</div>
     </div>
   );
