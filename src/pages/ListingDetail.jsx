@@ -8,7 +8,6 @@ export default function ListingDetails() {
   const navigate = useNavigate();
 
   const [item, setItem] = useState(null);
-  const [hostProfile, setHostProfile] = useState(null);
   const [extraImages, setExtraImages] = useState([]);
   const [user, setUser] = useState(null);
   const [err, setErr] = useState(null);
@@ -19,32 +18,36 @@ export default function ListingDetails() {
       setLoading(true);
       setErr(null);
 
-      // 1) Get listing (include user_id so we can look up the host’s profile)
+      // 1) Get listing & host profile in one query
       const { data: listing, error: listErr } = await supabase
         .from("listings")
         .select(
-          [
-            "id",
-            "user_id",                 // 👈 IMPORTANT
-            "title",
-            "city",
-            "location",
-            "price",
-            "price_ghs",
-            "description",
-            "image_url",
-            "property_type",
-            "room_type",
-            "gender_pref",
-            "lifestyle_pref",
-            "pets_pref",
-            "amenities",
-            // legacy host columns (fallback)
-            "host_name",
-            "host_avatar_url",
-            "is_verified_host",
-            "created_at",
-          ].join(", ")
+          `
+          id,
+          user_id,
+          title,
+          city,
+          location,
+          price,
+          price_ghs,
+          description,
+          image_url,
+          property_type,
+          room_type,
+          gender_pref,
+          lifestyle_pref,
+          pets_pref,
+          amenities,
+          host_name,
+          host_avatar_url,
+          is_verified_host,
+          created_at,
+          profiles (
+            full_name,
+            avatar_url,
+            is_verified
+          )
+        `
         )
         .eq("id", id)
         .single();
@@ -56,18 +59,7 @@ export default function ListingDetails() {
       }
       setItem(listing);
 
-      // 2) Host profile via user_id (if we have one)
-      if (listing?.user_id) {
-        const { data: profile, error: profErr } = await supabase
-          .from("profiles")
-          .select("full_name, avatar_url, is_verified")
-          .eq("id", listing.user_id)
-          .maybeSingle();
-
-        if (!profErr) setHostProfile(profile || null);
-      }
-
-      // 3) Extra images
+      // 2) Extra images
       const { data: imgs } = await supabase
         .from("listing_images")
         .select("id, url")
@@ -75,7 +67,7 @@ export default function ListingDetails() {
         .order("created_at", { ascending: true });
       setExtraImages(imgs || []);
 
-      // 4) Current viewer
+      // 3) Current viewer
       const { data: auth } = await supabase.auth.getUser();
       setUser(auth?.user ?? null);
 
@@ -114,19 +106,18 @@ export default function ListingDetails() {
 
   // --- Host display values (profile first, then legacy listing fields, then placeholder)
   const hostName =
-    hostProfile?.full_name ||
+    item.profiles?.full_name ||
     item.host_name ||
     "Host";
 
   const hostAvatar =
-    hostProfile?.avatar_url ||
+    item.profiles?.avatar_url ||
     item.host_avatar_url ||
-    // placeholder with initials
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(hostName || "Host")}`;
 
   const isVerifiedHost =
-    (hostProfile?.is_verified ?? null) !== null
-      ? !!hostProfile?.is_verified
+    (item.profiles?.is_verified ?? null) !== null
+      ? !!item.profiles?.is_verified
       : !!item.is_verified_host;
 
   return (
