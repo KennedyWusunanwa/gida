@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../../src/supabaseClient"; // 👈 moved inside src
 import Logo from "../assets/logo.png";
+
 
 export default function ListingDetails() {
   const { id } = useParams();
