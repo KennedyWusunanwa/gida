@@ -8,11 +8,10 @@ export default function Inbox() {
   const activeId = params.get("c") || null;
 
   const [user, setUser] = useState(null);
-
-  const [convos, setConvos] = useState([]); // [{ id,type,listing_id,created_at, participants:[{user_id, profiles:{...}}] }]
+  const [convos, setConvos] = useState([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
 
-  const [messages, setMessages] = useState([]); // [{... , profiles: {id, full_name, avatar_url}}]
+  const [messages, setMessages] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
   const [text, setText] = useState("");
@@ -26,82 +25,60 @@ export default function Inbox() {
     supabase.auth.getUser().then(({ data }) => {
       if (mounted) setUser(data?.user ?? null);
     });
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
-  // Load conversations for this user, then load participants and hydrate profiles (no FK required)
+  // Load conversations & subscribe for realtime new ones
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
-    (async () => {
+    async function fetchConvos() {
       setLoadingConvos(true);
-      // Get conversations where current user is a participant
       const { data: convs, error: convErr } = await supabase
         .from("conversations")
-        .select(
-          `
+        .select(`
           id,
           type,
           listing_id,
           created_at,
           conversation_participants!inner(user_id)
-        `
-        )
+        `)
         .eq("conversation_participants.user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (convErr) {
         console.error(convErr);
-        if (!cancelled) {
-          setConvos([]);
-          setLoadingConvos(false);
-        }
-        return;
-      }
-
-      const list = convs || [];
-      const ids = list.map((c) => c.id);
-      if (ids.length === 0) {
-        if (!cancelled) {
-          setConvos([]);
-          setLoadingConvos(false);
-        }
-        return;
-      }
-
-      // Fetch ALL participants (without embedded profiles)
-      const { data: parts, error: partErr } = await supabase
-        .from("conversation_participants")
-        .select("conversation_id, user_id")
-        .in("conversation_id", ids);
-
-      if (partErr) {
-        console.error(partErr);
-        if (!cancelled) setConvos(list.map((c) => ({ ...c, participants: [] })));
+        if (!cancelled) setConvos([]);
         setLoadingConvos(false);
         return;
       }
 
-      // Fetch the profiles for those user_ids separately
-      const userIds = Array.from(new Set((parts || []).map((p) => p.user_id)));
+      const ids = convs.map((c) => c.id);
+      if (!ids.length) {
+        if (!cancelled) setConvos([]);
+        setLoadingConvos(false);
+        return;
+      }
+
+      const { data: parts } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id, user_id")
+        .in("conversation_id", ids);
+
+      const userIds = Array.from(new Set(parts.map((p) => p.user_id)));
       let profileMap = new Map();
       if (userIds.length) {
-        const { data: profs, error: profErr } = await supabase
+        const { data: profs } = await supabase
           .from("profiles")
           .select("id, full_name, avatar_url")
           .in("id", userIds);
-
-        if (profErr) console.error(profErr);
-        profileMap = new Map((profs || []).map((p) => [p.id, p]));
+        profileMap = new Map(profs.map((p) => [p.id, p]));
       }
 
-      // Glue participants + their profile onto the conversational list
       const byConv = new Map();
-      for (const c of list) byConv.set(c.id, { ...c, participants: [] });
-      for (const p of parts || []) {
+      for (const c of convs) byConv.set(c.id, { ...c, participants: [] });
+      for (const p of parts) {
         const row = byConv.get(p.conversation_id);
         if (!row) continue;
         row.participants.push({
@@ -114,71 +91,87 @@ export default function Inbox() {
         setConvos(Array.from(byConv.values()));
         setLoadingConvos(false);
       }
-    })();
+    }
+
+    fetchConvos();
+
+    // Realtime: new conversation for this user
+    const convoChannel = supabase
+      .channel(`convos:user:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "conversation_participants", filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          const newConvoId = payload.new.conversation_id;
+          const { data: newConvo } = await supabase
+            .from("conversations")
+            .select(`
+              id,
+              type,
+              listing_id,
+              created_at,
+              conversation_participants (
+                user_id,
+                profiles ( id, full_name, avatar_url )
+              )
+            `)
+            .eq("id", newConvoId)
+            .maybeSingle();
+
+          if (newConvo) {
+            setConvos((prev) => [newConvo, ...prev]);
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
       cancelled = true;
+      supabase.removeChannel(convoChannel);
     };
   }, [user?.id]);
 
-  // Load messages for active convo + membership check + realtime
+  // Load messages & subscribe for realtime
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
     let channel;
 
-    (async () => {
+    async function fetchMessages() {
       setLoadingMsgs(true);
 
-      // Ensure the user belongs to this conversation (RLS will also enforce)
       if (user?.id) {
-        const { data: membership, error: memErr } = await supabase
+        const { data: membership } = await supabase
           .from("conversation_participants")
           .select("conversation_id")
           .eq("conversation_id", activeId)
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (memErr) {
-          console.error(memErr);
-        }
         if (!membership) {
-          // Not a participant — clear view
           setMessages([]);
           setLoadingMsgs(false);
           return;
         }
       }
 
-      // Fetch raw messages first (no embeds)
-      const { data: msgs, error: msgErr } = await supabase
+      const { data: msgs } = await supabase
         .from("messages")
         .select("id, conversation_id, sender_id, body, created_at")
         .eq("conversation_id", activeId)
         .order("created_at", { ascending: true });
 
-      if (msgErr) {
-        console.error(msgErr);
-        if (!cancelled) {
-          setMessages([]);
-          setLoadingMsgs(false);
-        }
-        return;
-      }
-
-      // Hydrate sender profiles in one go
-      const senderIds = Array.from(new Set((msgs || []).map((m) => m.sender_id)));
+      const senderIds = Array.from(new Set(msgs.map((m) => m.sender_id)));
       let senderMap = new Map();
       if (senderIds.length) {
-        const { data: senders, error: sendErr } = await supabase
+        const { data: senders } = await supabase
           .from("profiles")
           .select("id, full_name, avatar_url")
           .in("id", senderIds);
-        if (sendErr) console.error(sendErr);
-        senderMap = new Map((senders || []).map((p) => [p.id, p]));
+        senderMap = new Map(senders.map((p) => [p.id, p]));
       }
 
-      const hydrated = (msgs || []).map((m) => ({
+      const hydrated = msgs.map((m) => ({
         ...m,
         profiles: senderMap.get(m.sender_id) || null,
       }));
@@ -187,31 +180,28 @@ export default function Inbox() {
         setMessages(hydrated);
         setLoadingMsgs(false);
       }
+    }
 
-      // Realtime subscription: on new message, fetch the sender profile and append
-      channel = supabase
-        .channel(`chat:${activeId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `conversation_id=eq.${activeId}`,
-          },
-          async (payload) => {
-            const m = payload.new;
-            const { data: prof } = await supabase
-              .from("profiles")
-              .select("id, full_name, avatar_url")
-              .eq("id", m.sender_id)
-              .maybeSingle();
+    fetchMessages();
 
-            setMessages((prev) => [...prev, { ...m, profiles: prof || null }]);
-          }
-        )
-        .subscribe();
-    })();
+    // Realtime: new message in this convo
+    channel = supabase
+      .channel(`chat:${activeId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` },
+        async (payload) => {
+          const m = payload.new;
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("id, full_name, avatar_url")
+            .eq("id", m.sender_id)
+            .maybeSingle();
+
+          setMessages((prev) => [...prev, { ...m, profiles: prof || null }]);
+        }
+      )
+      .subscribe();
 
     return () => {
       cancelled = true;
@@ -219,12 +209,10 @@ export default function Inbox() {
     };
   }, [activeId, user?.id]);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  // Derive "other party" for header for the active convo
   const activeOther = useMemo(() => {
     if (!activeId) return null;
     const c = convos.find((x) => x.id === activeId);
@@ -240,7 +228,6 @@ export default function Inbox() {
     activeOther?.avatar_url ||
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(headerName)}`;
 
-  // Sidebar list items with "other party" info
   const sidebarItems = useMemo(() => {
     return convos.map((c) => {
       let other = null;
@@ -352,12 +339,6 @@ export default function Inbox() {
                 messages.map((m) => {
                   const mine = m.sender_id === user?.id;
                   const name = m.profiles?.full_name || (mine ? "You" : "User");
-                  const avatar =
-                    m.profiles?.avatar_url ||
-                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-                      name
-                    )}`;
-
                   return (
                     <div
                       key={m.id}
@@ -365,7 +346,6 @@ export default function Inbox() {
                         mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1] text-black"
                       }`}
                     >
-                      {/* Name + (optional) tiny avatar for clarity */}
                       <div className={`mb-1 text-xs font-semibold ${mine ? "opacity-90" : "opacity-70"}`}>
                         {name}
                       </div>
