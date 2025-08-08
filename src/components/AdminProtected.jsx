@@ -1,18 +1,43 @@
-// src/components/AdminProtected.jsx
 import { Navigate, Outlet } from "react-router-dom";
-import { useSession } from "@supabase/auth-helpers-react";
+import { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 export default function AdminProtected() {
-  const session = useSession();
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // If user is not logged in
-  if (!session) return <Navigate to="/" replace />;
+  useEffect(() => {
+    let mounted = true;
 
-  // SIMPLE CHECK: Allow only if email matches admin
-  const isAdmin = session.user?.email === "admin@gida.com"; // 👈 Replace with your actual admin email
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!mounted) return;
 
-  // If not admin, redirect to normal auth page
-  if (!isAdmin) return <Navigate to="/auth" replace />;
+      if (!user) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      // Read is_admin from profiles (requires RLS policy to allow self-select)
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!mounted) return;
+      setIsAdmin(profile?.is_admin === true);
+      setLoading(false);
+    };
+
+    check();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => check());
+    return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
+  }, []);
+
+  if (loading) return null;             // show spinner if you want
+  if (!isAdmin) return <Navigate to="/" replace />;
 
   return <Outlet />;
 }
