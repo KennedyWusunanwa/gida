@@ -15,13 +15,14 @@ import Inbox from "./pages/Inbox";
 import EditProfile from "./pages/EditProfile";
 import Protected from "./components/Protected";
 
-// Admin dashboard pages
-import AdminLayout from "./admin/AdminLayout";
-import AdminOverview from "./admin/Overview";   // ✅ Ensure correct path
-import AdminUsers from "./admin/Users";         // ✅ Ensure correct path
-import AdminListings from "./admin/Listings";   // ✅ Ensure correct path
-import AdminSignIn from "./admin/AdminSignIn";  // ✅ Ensure correct path
+// Admin dashboard
+import AdminLayout from "./admin/AdminLayout";          // stays here
+import AdminOverview from "./admin/pages/Overview";     // 👈 under pages
+import AdminUsers from "./admin/pages/Users";
+import AdminListings from "./admin/pages/Listings";
+import AdminSignIn from "./admin/pages/SignIn";
 import AdminProtected from "./components/AdminProtected";
+
 
 export default function App() {
   return (
