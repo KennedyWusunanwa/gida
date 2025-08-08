@@ -1,3 +1,4 @@
+// src/layouts/DashboardLayout.jsx
 import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useOutletContext, Link } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -11,13 +12,27 @@ export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    const init = async () => {
       const { data } = await supabase.auth.getUser();
       const u = data?.user ?? null;
-      if (!u) navigate("/");
-      else setUser(u);
-      setLoading(false);
-    })();
+      if (mounted) {
+        if (!u) navigate("/");
+        else setUser(u);
+        setLoading(false);
+      }
+    };
+    init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const logout = async () => {
@@ -65,8 +80,6 @@ export default function DashboardLayout() {
 
       {/* ===== Shell: Sidebar + Content ===== */}
       <div className="mx-auto max-w-7xl grid grid-cols-1 md:grid-cols-[240px_1fr] gap-0">
-        {/* Sidebar (drawer on mobile) */}
-        {/* Overlay */}
         {sidebarOpen && (
           <div
             className="fixed inset-0 z-40 bg-black/30 md:hidden"
@@ -79,7 +92,6 @@ export default function DashboardLayout() {
                        bg-[#FFF6EA] md:bg-transparent border-r md:border-0 border-black/10
                        transform transition-transform duration-200 ease-in-out
                        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
-          aria-label="Sidebar"
         >
           <div className="md:hidden flex items-center justify-between p-4">
             <div className="font-bold">Menu</div>
@@ -111,11 +123,8 @@ export default function DashboardLayout() {
           </div>
         </aside>
 
-        {/* Main Content */}
         <main className="min-h-[calc(100vh-4rem)] md:min-h-0 px-4 md:px-6 lg:px-8 py-6">
-          {/* Inner container for nice readable width */}
           <div className="max-w-5xl">
-            {/* Children pages render here */}
             <Outlet context={{ user }} />
           </div>
         </main>
@@ -129,9 +138,7 @@ function HeaderLink({ to, children }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `text-sm font-medium hover:opacity-80 ${
-          isActive ? "underline underline-offset-4" : ""
-        }`
+        `text-sm font-medium hover:opacity-80 ${isActive ? "underline underline-offset-4" : ""}`
       }
     >
       {children}
@@ -144,12 +151,9 @@ function SideLink({ to, children }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `px-3 py-2 rounded-lg transition hover:bg-black/5 ${
-          isActive ? "bg-black/10 font-semibold" : "opacity-90"
-        }`
+        `px-3 py-2 rounded-lg transition hover:bg-black/5 ${isActive ? "bg-black/10 font-semibold" : "opacity-90"}`
       }
       onClick={() => {
-        // close mobile drawer after navigation
         const btn = document.querySelector('button[aria-label="Open menu"]');
         if (btn) btn.click();
       }}
@@ -159,7 +163,6 @@ function SideLink({ to, children }) {
   );
 }
 
-// Hook to use the user in child routes
 export const useDashboardUser = () => {
   const { user } = useOutletContext() || {};
   return user;

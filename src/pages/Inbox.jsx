@@ -1,5 +1,5 @@
 // src/pages/Inbox.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
@@ -10,240 +10,169 @@ export default function Inbox() {
   const [user, setUser] = useState(null);
   const [convos, setConvos] = useState([]);
   const [loadingConvos, setLoadingConvos] = useState(true);
+
   const [messages, setMessages] = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
+
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-
   const bottomRef = useRef(null);
 
-  // ====== Load signed-in user ======
+  // Load signed-in user and keep updated
   useEffect(() => {
+    let mounted = true;
     supabase.auth.getUser().then(({ data }) => {
-      setUser(data?.user ?? null);
+      if (mounted) setUser(data?.user ?? null);
     });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
-  // ====== Fetch conversations helper ======
-  const fetchConvos = useCallback(async () => {
+  // Load conversations & subscribe to changes
+  useEffect(() => {
     if (!user?.id) return;
-    setLoadingConvos(true);
+    let cancelled = false;
+    let channel;
 
-    const { data: convs, error: convErr } = await supabase
-      .from("conversations")
-      .select(
+    const loadConvos = async () => {
+      setLoadingConvos(true);
+      const { data: convs, error } = await supabase
+        .from("conversations")
+        .select(
+          `
+          id,
+          type,
+          listing_id,
+          created_at,
+          conversation_participants!inner(user_id)
         `
-        id,
-        type,
-        listing_id,
-        created_at,
-        conversation_participants!inner(user_id)
-      `
-      )
-      .eq("conversation_participants.user_id", user.id)
-      .order("created_at", { ascending: false });
+        )
+        .eq("conversation_participants.user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    if (convErr) {
-      console.error(convErr);
-      setConvos([]);
-      setLoadingConvos(false);
-      return;
-    }
-
-    const ids = convs.map((c) => c.id);
-    if (ids.length === 0) {
-      setConvos([]);
-      setLoadingConvos(false);
-      return;
-    }
-
-    const { data: parts } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", ids);
-
-    const userIds = [...new Set(parts.map((p) => p.user_id))];
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", userIds);
-
-    const profileMap = new Map((profs || []).map((p) => [p.id, p]));
-
-    const byConv = new Map();
-    for (const c of convs) byConv.set(c.id, { ...c, participants: [] });
-    for (const p of parts) {
-      const row = byConv.get(p.conversation_id);
-      if (row) {
-        row.participants.push({
-          ...p,
-          profiles: profileMap.get(p.user_id) || null,
-        });
+      if (error) {
+        console.error(error);
+        if (!cancelled) setConvos([]);
+        setLoadingConvos(false);
+        return;
       }
-    }
+      setConvos(convs || []);
+      setLoadingConvos(false);
+    };
 
-    setConvos(Array.from(byConv.values()));
-    setLoadingConvos(false);
-  }, [user?.id]);
+    loadConvos();
 
-  // ====== Initial fetch conversations ======
-  useEffect(() => {
-    fetchConvos();
-  }, [fetchConvos]);
-
-  // ====== Listen for new messages globally to update convo list ======
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel(`global-messages:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        () => {
-          fetchConvos();
-        }
-      )
+    // Listen for new conversations
+    channel = supabase
+      .channel("realtime:conversations")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversations" }, () => {
+        loadConvos();
+      })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, [user?.id, fetchConvos]);
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
-  // ====== Fetch messages for active conversation ======
-  const fetchMessages = useCallback(async () => {
+  // Load messages for active convo & subscribe
+  useEffect(() => {
     if (!activeId || !user?.id) return;
-    setLoadingMsgs(true);
+    let cancelled = false;
+    let channel;
 
-    // membership check
-    const { data: membership } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("conversation_id", activeId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const loadMessages = async () => {
+      setLoadingMsgs(true);
+      const { data: msgs, error } = await supabase
+        .from("messages")
+        .select("id, conversation_id, sender_id, body, created_at")
+        .eq("conversation_id", activeId)
+        .order("created_at", { ascending: true });
 
-    if (!membership) {
-      setMessages([]);
+      if (error) {
+        console.error(error);
+        if (!cancelled) setMessages([]);
+        setLoadingMsgs(false);
+        return;
+      }
+      setMessages(msgs || []);
       setLoadingMsgs(false);
-      return;
-    }
+    };
 
-    const { data: msgs } = await supabase
-      .from("messages")
-      .select("id, conversation_id, sender_id, body, created_at")
-      .eq("conversation_id", activeId)
-      .order("created_at", { ascending: true });
+    loadMessages();
 
-    const senderIds = [...new Set(msgs.map((m) => m.sender_id))];
-    const { data: senders } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", senderIds);
-
-    const senderMap = new Map((senders || []).map((p) => [p.id, p]));
-
-    const hydrated = msgs.map((m) => ({
-      ...m,
-      profiles: senderMap.get(m.sender_id) || null,
-    }));
-
-    setMessages(hydrated);
-    setLoadingMsgs(false);
-  }, [activeId, user?.id]);
-
-  // ====== Initial fetch messages when convo changes ======
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
-
-  // ====== Listen for new messages in active conversation ======
-  useEffect(() => {
-    if (!activeId) return;
-    const channel = supabase
+    channel = supabase
       .channel(`chat:${activeId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` },
-        async (payload) => {
-          const m = payload.new;
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("id, full_name, avatar_url")
-            .eq("id", m.sender_id)
-            .maybeSingle();
-
-          setMessages((prev) => [...prev, { ...m, profiles: prof || null }]);
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new]);
         }
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, [activeId]);
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [activeId, user?.id]);
 
-  // ====== Auto-scroll ======
+  // Scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
-  const sidebarItems = useMemo(() => {
-    return convos.map((c) => {
-      const other = (c.participants || []).find((p) => p.user_id !== user?.id)?.profiles;
-      const name = other?.full_name || (c.type === "support" ? "Gida Support" : "Chat");
-      const avatar =
-        other?.avatar_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
-      return { id: c.id, name, avatar, created_at: c.created_at };
-    });
-  }, [convos, user?.id]);
-
-  const openConvo = (id) => {
-    const next = new URLSearchParams(params);
-    next.set("c", id);
-    setParams(next);
-  };
-
-  async function send(e) {
+  const send = async (e) => {
     e.preventDefault();
-    if (!user?.id || !activeId) return;
-    const body = text.trim();
-    if (!body) return;
-
+    if (!text.trim()) return;
     setSending(true);
     const { error } = await supabase.from("messages").insert({
       conversation_id: activeId,
       sender_id: user.id,
-      body,
+      body: text.trim(),
     });
     if (error) console.error(error);
     setText("");
     setSending(false);
-  }
+  };
 
-  // ====== Render ======
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
+      {/* Sidebar + Chat */}
       <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-[280px_1fr] gap-4 p-4">
-        {/* Sidebar */}
         <aside className="bg-white rounded-2xl shadow p-3">
           <h2 className="text-xl font-extrabold mb-3">Messages</h2>
           {loadingConvos ? (
             <p className="opacity-70">Loading…</p>
-          ) : sidebarItems.length === 0 ? (
-            <p className="opacity-70">No conversations yet.</p>
           ) : (
             <ul className="space-y-2">
-              {sidebarItems.map((c) => (
+              {convos.map((c) => (
                 <li key={c.id}>
                   <button
-                    onClick={() => openConvo(c.id)}
+                    onClick={() => {
+                      const next = new URLSearchParams(params);
+                      next.set("c", c.id);
+                      setParams(next);
+                    }}
                     className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 ${
                       activeId === c.id ? "bg-[#F7F0E6]" : "hover:bg-[#F7F0E6]"
                     }`}
                   >
-                    <img src={c.avatar} alt={c.name} className="h-8 w-8 rounded-full" />
                     <div className="flex-1">
-                      <div className="font-semibold">{c.name}</div>
+                      <div className="font-semibold">
+                        {c.type === "support" ? "Gida Support" : "Chat"}
+                      </div>
                       <div className="text-[11px] opacity-60">
-                        {new Date(c.created_at).toLocaleDateString()}
+                        Started {new Date(c.created_at).toLocaleDateString()}
                       </div>
                     </div>
                   </button>
@@ -253,53 +182,25 @@ export default function Inbox() {
           )}
         </aside>
 
-        {/* Chat */}
         <section className="bg-white rounded-2xl shadow flex flex-col">
           <div className="px-4 py-3 border-b border-black/5 flex items-center gap-3">
-            {activeId && (
-              <>
-                <img
-                  src={
-                    sidebarItems.find((s) => s.id === activeId)?.avatar ||
-                    `https://api.dicebear.com/7.x/initials/svg?seed=User`
-                  }
-                  alt=""
-                  className="h-8 w-8 rounded-full"
-                />
-                <div className="text-lg font-bold">
-                  {sidebarItems.find((s) => s.id === activeId)?.name || "Conversation"}
-                </div>
-              </>
-            )}
+            <div className="text-lg font-bold">Conversation</div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {loadingMsgs && activeId ? (
+            {loadingMsgs ? (
               <p className="opacity-70">Loading messages…</p>
-            ) : messages.length === 0 ? (
-              <div className="opacity-70">No messages yet.</div>
             ) : (
-              messages.map((m) => {
-                const mine = m.sender_id === user?.id;
-                const name = m.profiles?.full_name || (mine ? "You" : "User");
-                return (
-                  <div
-                    key={m.id}
-                    className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                      mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1] text-black"
-                    }`}
-                  >
-                    <div className="mb-1 text-xs font-semibold opacity-70">{name}</div>
-                    <div>{m.body}</div>
-                    <div className="mt-1 text-[10px] opacity-50">
-                      {new Date(m.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                );
-              })
+              messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                    m.sender_id === user?.id ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1] text-black"
+                  }`}
+                >
+                  {m.body}
+                </div>
+              ))
             )}
             <div ref={bottomRef} />
           </div>
@@ -309,7 +210,7 @@ export default function Inbox() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Type a message…"
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3"
+              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none"
               disabled={!user || !activeId || sending}
             />
             <button
