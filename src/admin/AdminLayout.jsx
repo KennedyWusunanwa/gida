@@ -6,16 +6,46 @@ export default function AdminLayout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return navigate("/admin/signin");
+    let mounted = true;
 
-      const { data: profile } = await supabase.from("profiles").select("is_admin").eq("id", user.id).single();
-      if (!profile?.is_admin) return navigate("/");
+    const checkAdmin = async () => {
+      const { data: { user }, error: uErr } = await supabase.auth.getUser();
+      if (uErr) console.error(uErr);
+      if (!mounted) return;
+
+      if (!user) {
+        navigate("/admin/signin", { replace: true });
+        return;
+      }
+
+      const { data: profile, error: pErr, status } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .single();
+
+      if (pErr && status !== 406) {
+        console.error(pErr);
+        navigate("/admin/signin", { replace: true });
+        return;
+      }
+
+      if (!profile?.is_admin) {
+        navigate("/", { replace: true });
+      }
     };
 
     checkAdmin();
-  }, []);
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      checkAdmin();
+    });
+
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] flex flex-col">

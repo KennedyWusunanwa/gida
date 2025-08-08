@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Listings from "./pages/Listings";
-import ListingDetail from "./pages/ListingDetail"; // ✅ Make sure file & export name match
+import ListingDetail from "./pages/ListingDetail";
 
 // User dashboard pages
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -17,10 +17,10 @@ import Protected from "./components/Protected";
 
 // Admin dashboard pages
 import AdminLayout from "./admin/AdminLayout";
-import AdminOverview from "./admin/pages/Overview";
-import AdminUsers from "./admin/pages/Users";
-import AdminListings from "./admin/pages/Listings";
-import AdminSignIn from "./admin/pages/SignIn";
+import AdminOverview from "./admin/Overview";   // ✅ Ensure correct path
+import AdminUsers from "./admin/Users";         // ✅ Ensure correct path
+import AdminListings from "./admin/Listings";   // ✅ Ensure correct path
+import AdminSignIn from "./admin/AdminSignIn";  // ✅ Ensure correct path
 import AdminProtected from "./components/AdminProtected";
 
 export default function App() {
@@ -31,8 +31,9 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
-        <Route path="/listings/:id" element={<ListingDetail />} /> {/* ✅ Correct path */}
+        <Route path="/listings/:id" element={<ListingDetail />} />
 
+        {/* ADMIN SIGN-IN */}
         <Route path="/admin/signin" element={<AdminSignIn />} />
 
         {/* USER DASHBOARD */}
@@ -56,7 +57,7 @@ export default function App() {
           </Route>
         </Route>
 
-        {/* FALLBACK */}
+        {/* CATCH-ALL */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

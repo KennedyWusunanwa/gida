@@ -3,20 +3,41 @@ import { supabase } from "../../supabaseClient";
 
 export default function AdminListings() {
   const [listings, setListings] = useState([]);
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const fetchListings = async () => {
-    const { data } = await supabase.from("listings").select("*").order("created_at", { ascending: false });
+    setErr(null);
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("listings")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) setErr("Failed to load listings.");
     setListings(data || []);
+    setLoading(false);
   };
 
   const toggleApproval = async (id, is_published) => {
-    await supabase.from("listings").update({ is_published: !is_published }).eq("id", id);
+    const { error } = await supabase
+      .from("listings")
+      .update({ is_published: !is_published })
+      .eq("id", id);
+
+    if (error) {
+      alert("Update failed (check RLS/policies).");
+      return;
+    }
     fetchListings();
   };
 
   useEffect(() => {
     fetchListings();
   }, []);
+
+  if (loading) return <p>Loading…</p>;
+  if (err) return <p className="text-red-600">{err}</p>;
 
   return (
     <div className="p-4">

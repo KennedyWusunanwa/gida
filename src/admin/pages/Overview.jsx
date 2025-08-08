@@ -3,23 +3,36 @@ import { supabase } from "../../supabaseClient";
 
 export default function Overview() {
   const [stats, setStats] = useState({ users: 0, listings: 0 });
+  const [err, setErr] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
-      const [{ count: userCount }] = await Promise.all([
+      setErr(null);
+      setLoading(true);
+
+      const [profilesRes, listingsRes] = await Promise.all([
         supabase.from("profiles").select("*", { count: "exact", head: true }),
         supabase.from("listings").select("*", { count: "exact", head: true }),
       ]);
 
-      const { count: listingCount } = await supabase
-        .from("listings")
-        .select("*", { count: "exact", head: true });
+      if (profilesRes.error || listingsRes.error) {
+        setErr("Failed to load stats.");
+      } else {
+        setStats({
+          users: profilesRes.count ?? 0,
+          listings: listingsRes.count ?? 0,
+        });
+      }
 
-      setStats({ users: userCount, listings: listingCount });
+      setLoading(false);
     };
 
     fetchStats();
   }, []);
+
+  if (loading) return <p>Loading…</p>;
+  if (err) return <p className="text-red-600">{err}</p>;
 
   return (
     <div className="p-4">
