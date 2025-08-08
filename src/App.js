@@ -6,6 +6,9 @@ import Auth from "./pages/Auth";
 import Listings from "./pages/Listings";
 import ListingDetail from "./pages/ListingDetail";
 
+// Debug
+import Debug from "./pages/Debug";
+
 // User dashboard pages
 import DashboardLayout from "./layouts/DashboardLayout";
 import MyListings from "./pages/MyListings";
@@ -16,13 +19,12 @@ import EditProfile from "./pages/EditProfile";
 import Protected from "./components/Protected";
 
 // Admin dashboard
-import AdminLayout from "./admin/AdminLayout";          // stays here
-import AdminOverview from "./admin/pages/Overview";     // 👈 under pages
+import AdminLayout from "./admin/AdminLayout";
+import AdminOverview from "./admin/pages/Overview";
 import AdminUsers from "./admin/pages/Users";
 import AdminListings from "./admin/pages/Listings";
 import AdminSignIn from "./admin/pages/SignIn";
 import AdminProtected from "./components/AdminProtected";
-
 
 export default function App() {
   return (
@@ -34,10 +36,13 @@ export default function App() {
         <Route path="/listings" element={<Listings />} />
         <Route path="/listings/:id" element={<ListingDetail />} />
 
+        {/* DEBUG */}
+        <Route path="/debug" element={<Debug />} />
+
         {/* ADMIN SIGN-IN */}
         <Route path="/admin/signin" element={<AdminSignIn />} />
 
-        {/* USER DASHBOARD */}
+        {/* USER DASHBOARD (non-admins only) */}
         <Route element={<Protected />}>
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="my-listings" replace />} />
