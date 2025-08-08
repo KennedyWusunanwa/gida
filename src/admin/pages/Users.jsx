@@ -1,3 +1,4 @@
+// src/admin/pages/Users.jsx
 import { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 
@@ -9,13 +10,26 @@ export default function AdminUsers() {
   const fetchUsers = async () => {
     setErr(null);
     setLoading(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, is_approved")
-      .order("created_at", { ascending: false });
 
-    if (error) setErr("Failed to load users.");
-    setUsers(data || []);
+    // Use the admin RPC (must exist). Falls back to plain profiles if RPC missing.
+    let data = null, error = null;
+
+    const rpc = await supabase.rpc("admin_list_profiles");
+    if (rpc.error && rpc.error.message?.includes("function admin_list_profiles")) {
+      // RPC not found — fallback to profiles (no email)
+      const res = await supabase.from("profiles").select("id, full_name, is_approved");
+      data = res.data; error = res.error;
+    } else {
+      data = rpc.data; error = rpc.error;
+    }
+
+    if (error) {
+      console.error("profiles/admin_list_profiles error:", error);
+      setErr(`Failed to load users: ${error.message}`);
+    } else {
+      setUsers(data || []);
+    }
+
     setLoading(false);
   };
 
@@ -26,7 +40,8 @@ export default function AdminUsers() {
       .eq("id", id);
 
     if (error) {
-      alert("Update failed (check RLS/policies).");
+      console.error("profiles update error:", error);
+      alert(`Update failed: ${error.message} (check RLS/policies).`);
       return;
     }
     fetchUsers();
@@ -47,7 +62,9 @@ export default function AdminUsers() {
           <div key={user.id} className="bg-white p-4 rounded shadow flex justify-between items-center">
             <div>
               <p className="font-semibold">{user.full_name || "—"}</p>
-              <p className="text-sm text-gray-500">{user.email || "No email saved"}</p>
+              {"email" in user && (
+                <p className="text-sm text-gray-500">{user.email || "No email"}</p>
+              )}
             </div>
             <button
               onClick={() => toggleApproval(user.id, user.is_approved)}
