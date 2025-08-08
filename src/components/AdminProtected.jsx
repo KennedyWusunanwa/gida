@@ -8,36 +8,29 @@ export default function AdminProtected() {
 
   useEffect(() => {
     let mounted = true;
-
     const check = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!mounted) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!mounted) return;
+        if (!user) { setIsAdmin(false); return; }
 
-      if (!user) {
+        const { data: profile, error } = await supabase
+          .from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
+        if (error) console.error("AdminProtected profiles error:", error);
+        setIsAdmin(profile?.is_admin === true);
+      } catch (e) {
+        console.error("AdminProtected fatal:", e);
         setIsAdmin(false);
-        setLoading(false);
-        return;
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      // Read is_admin from profiles (requires RLS policy to allow self-select)
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_admin")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!mounted) return;
-      setIsAdmin(profile?.is_admin === true);
-      setLoading(false);
     };
-
     check();
     const { data: sub } = supabase.auth.onAuthStateChange(() => check());
     return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
 
-  if (loading) return null;             // show spinner if you want
-  if (!isAdmin) return <Navigate to="/" replace />;
-
+  if (loading) return <p>Loading admin…</p>;
+  if (!isAdmin) return <Navigate to="/admin/signin" replace />;
   return <Outlet />;
 }
