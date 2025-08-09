@@ -79,7 +79,7 @@ export default function Home() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
-            <Link to="/search" className="hover:opacity-70">Find Room</Link>
+            <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
             <Link to={inboxHref} className="hover:opacity-70">Messages</Link>
 

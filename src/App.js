@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Listings from "./pages/Listings";
 import ListingDetail from "./pages/ListingDetail";
+import RoommateMatching from "./pages/RoommateMatching"; // NEW
 
 // Debug
 import Debug from "./pages/Debug";
@@ -35,6 +36,7 @@ export default function App() {
         <Route path="/auth" element={<Auth />} />
         <Route path="/listings" element={<Listings />} />
         <Route path="/listings/:id" element={<ListingDetail />} />
+        <Route path="/roommate-matching" element={<RoommateMatching />} /> {/* NEW */}
 
         {/* DEBUG */}
         <Route path="/debug" element={<Debug />} />
