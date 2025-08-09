@@ -16,7 +16,9 @@ const AMENITIES = ["Wi-Fi", "AC", "Washer", "Parking", "Kitchen"];
 export default function Listings() {
   const [params, setParams] = useSearchParams();
 
-  const [q, setQ] = useState(params.get("q") || params.get("city") || "");
+  // Separate states for each filter
+  const [search, setSearch] = useState(params.get("q") || "");
+  const [city, setCity] = useState(params.get("city") || "");
   const [price, setPrice] = useState(params.get("price") || params.get("max") || "");
   const [amenity, setAmenity] = useState(params.get("amenity") || "");
   const [gender, setGender] = useState(params.get("gender") || "");
@@ -28,7 +30,8 @@ export default function Listings() {
   const onSearch = (e) => {
     e?.preventDefault?.();
     const next = new URLSearchParams();
-    if (q) next.set("q", q);
+    if (search) next.set("q", search);
+    if (city) next.set("city", city);
     if (price) next.set("price", price);
     if (amenity) next.set("amenity", amenity);
     if (gender) next.set("gender", gender);
@@ -43,29 +46,41 @@ export default function Listings() {
       let query = supabase
         .from("listings")
         .select(
-          "id, title, city, location, price, price_ghs, image_url, property_type, room_type, gender_pref, amenities, is_published, created_at"
+          "id, title, description, city, location, price, price_ghs, image_url, property_type, room_type, gender_pref, amenities, is_published, created_at"
         )
         .eq("is_published", true)
         .order("created_at", { ascending: false })
         .limit(24);
 
-      const cityParam = params.get("q") || params.get("city");
-      if (cityParam) query = query.ilike("city", `%${cityParam}%`);
+      // Search text (title + description)
+      const qParam = params.get("q");
+      if (qParam) {
+        query = query.or(`title.ilike.%${qParam}%,description.ilike.%${qParam}%`);
+      }
 
+      // City filter
+      const cityParam = params.get("city");
+      if (cityParam) {
+        query = query.ilike("city", `%${cityParam}%`);
+      }
+
+      // Price filter
       const priceParam = params.get("price") || params.get("max");
       if (priceParam) {
         const [minStr, maxStr] = priceParam.split("-");
         const min = minStr ? Number(minStr) : null;
         const max = maxStr ? Number(maxStr) : null;
-        if (min !== null) query = query.gte("price", min).gte("price_ghs", min);
-        if (max !== null) query = query.lte("price", max).lte("price_ghs", max);
+        if (min !== null) query = query.gte("price_ghs", min);
+        if (max !== null) query = query.lte("price_ghs", max);
       }
 
+      // Amenity filter
       const amenityParam = params.get("amenity");
       if (amenityParam) {
-        query = query.contains?.("amenities", [amenityParam]) || query;
+        query = query.contains("amenities", [amenityParam]);
       }
 
+      // Gender filter
       const genderParam = params.get("gender");
       if (genderParam) {
         query = query.eq("gender_pref", genderParam);
@@ -82,13 +97,13 @@ export default function Listings() {
 
   const cards = useMemo(() => {
     return data.map((item) => {
-      const price = item.price ?? item.price_ghs;
+      const priceValue = item.price ?? item.price_ghs;
       const title = item.title || `1 Room • ${item.city || item.location || "—"}`;
-      const badge = price != null ? `GH₵ ${Number(price).toLocaleString()}` : null;
+      const badge = priceValue != null ? `GH₵ ${Number(priceValue).toLocaleString()}` : null;
 
       return (
         <Link
-          to={`/listings/${item.id}`} // ✅ Corrected path
+          to={`/listings/${item.id}`}
           key={item.id}
           className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
         >
@@ -153,9 +168,9 @@ export default function Listings() {
           className="bg-white rounded-2xl p-3 shadow flex flex-col md:flex-row gap-3"
         >
           <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by location"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Keyword (e.g. '2 bedroom in Accra')"
             className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
           <button
@@ -169,14 +184,14 @@ export default function Listings() {
         {/* Filters */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <select
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
             className="rounded-xl border border-black/10 px-4 py-3 bg-white"
           >
             <option value="">Location</option>
-            <option>Accra</option>
-            <option>Kumasi</option>
-            <option>Takoradi</option>
+            <option value="Accra">Accra</option>
+            <option value="Kumasi">Kumasi</option>
+            <option value="Takoradi">Takoradi</option>
           </select>
 
           <select
@@ -217,6 +232,8 @@ export default function Listings() {
           {err && <p className="text-red-600">{err}</p>}
           {loading ? (
             <p className="opacity-70">Loading…</p>
+          ) : data.length === 0 ? (
+            <p className="opacity-70">No listings found.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {cards}
