@@ -8,14 +8,23 @@ export default function AdminProtected() {
 
   useEffect(() => {
     let mounted = true;
+
     const check = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!mounted) return;
-        if (!user) { setIsAdmin(false); return; }
+
+        if (!user) {
+          setIsAdmin(false);
+          return;
+        }
 
         const { data: profile, error } = await supabase
-          .from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", user.id)
+          .maybeSingle();
+
         if (error) console.error("AdminProtected profiles error:", error);
         setIsAdmin(profile?.is_admin === true);
       } catch (e) {
@@ -25,9 +34,13 @@ export default function AdminProtected() {
         if (mounted) setLoading(false);
       }
     };
+
     check();
     const { data: sub } = supabase.auth.onAuthStateChange(() => check());
-    return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
   }, []);
 
   if (loading) return <p>Loading admin…</p>;
