@@ -12,6 +12,9 @@ export default function RoommateMatching() {
   const [me, setMe] = useState(null);
   const [matches, setMatches] = useState([]);
 
+  // Profile preview modal
+  const [preview, setPreview] = useState(null);
+
   // Ghana-friendly defaults
   const [form, setForm] = useState({
     location_city: "",
@@ -83,7 +86,7 @@ export default function RoommateMatching() {
 
       // call server-side matching
       const { data: suggested, error: mErr } = await supabase
-        .rpc("match_roommates", { p_user: user.id, p_limit: 24 });
+        .rpc("match_roommates", { p_user: user.id, p_limit: 48 });
 
       if (mErr) throw mErr;
 
@@ -100,11 +103,99 @@ export default function RoommateMatching() {
     navigate("/auth");
   };
 
-  if (loading) return <div className="p-6">Loading…</div>;
-
+  // ---------- Derived values & hooks (must be before any early return) ----------
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
   const isHidden = me && me.is_active === false;
+
+  // compute min/max for score normalization
+  const [minScore, maxScore] = useMemo(() => {
+    if (!matches?.length) return [0, 1];
+    let min = Number.POSITIVE_INFINITY, max = Number.NEGATIVE_INFINITY;
+    for (const m of matches) {
+      const s = Number(m.score) || 0;
+      if (s < min) min = s;
+      if (s > max) max = s;
+    }
+    if (!isFinite(min) || !isFinite(max) || min === max) return [0, Math.max(1, max)];
+    return [min, max];
+  }, [matches]);
+
+  const toPercent = (score) => {
+    const s = Number(score) || 0;
+    if (maxScore === minScore) return 50;
+    const pct = ((s - minScore) / (maxScore - minScore)) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  };
+
+  const matchColor = (pct) => {
+    if (pct >= 75) return "bg-green-100 text-green-800 border-green-300";
+    if (pct >= 50) return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    if (pct >= 25) return "bg-orange-100 text-orange-800 border-orange-300";
+    return "bg-red-100 text-red-800 border-red-300";
+  };
+
+  const budgetOverlap = (meMin, meMax, cMin, cMax) => {
+    if ([meMin, meMax, cMin, cMax].some((v) => v == null)) return "—";
+    const overlap = Math.max(0, Math.min(meMax, cMax) - Math.max(meMin, cMin));
+    if (overlap <= 0) return "No overlap";
+    if (overlap < 300) return "Low overlap";
+    if (overlap < 800) return "Medium overlap";
+    return "High overlap";
+  };
+
+  // split matches by selected city
+  const city = (form.location_city || "").trim().toLowerCase();
+
+  const inCity = useMemo(() => {
+    if (!city) return matches;
+    return matches.filter((m) => (m.location_city || "").trim().toLowerCase() === city);
+  }, [matches, city]);
+
+  const outCity = useMemo(() => {
+    if (!city) return [];
+    return matches.filter((m) => (m.location_city || "").trim().toLowerCase() !== city);
+  }, [matches, city]);
+  // ---------------------------------------------------------------------------
+
+  if (loading) return <div className="p-6">Loading…</div>;
+
+  // profile preview content
+  const ProfileModal = ({ data, onClose }) => {
+    if (!data) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+        <div className="relative w-full max-w-lg bg-white rounded-2xl shadow p-5">
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 rounded-lg px-2 py-1 text-sm bg-black/5 hover:bg-black/10"
+          >
+            Close
+          </button>
+          <h3 className="text-xl font-extrabold">{data.full_name || "Gida user"}</h3>
+          <p className="text-black/70 text-sm">{data.location_city || "—"}</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl bg-black/5 px-3 py-2">Cleanliness: {data.cleanliness ?? "—"}</div>
+            <div className="rounded-xl bg-black/5 px-3 py-2">Schedule: {data.schedule || "—"}</div>
+            <div className="rounded-xl bg-black/5 px-3 py-2">Smoking: {data.smoking || "—"}</div>
+            <div className="rounded-xl bg-black/5 px-3 py-2">
+              Budget: {(data.budget_min ?? "—")}–{(data.budget_max ?? "—")} GHS
+            </div>
+          </div>
+          <p className="mt-4 text-sm">{data.bio || "No bio yet."}</p>
+          <div className="mt-5 flex gap-2">
+            <button
+              onClick={() => { onClose(); navigate(`/app/inbox?to=${data.candidate_id}`); }}
+              className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
+            >
+              Message
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
@@ -142,7 +233,7 @@ export default function RoommateMatching() {
 
           <h1 className="text-3xl font-extrabold">Roommate Matching</h1>
           <p className="mt-2 text-black/70">
-            Answer a few quick questions. We’ll compute a compatibility score and suggest roommates in {form.location_city || "your city"}.
+            City is key — pick your city and we’ll show your best matches there first.
           </p>
 
           {err && <p className="mt-3 text-red-600">{err}</p>}
@@ -254,53 +345,129 @@ export default function RoommateMatching() {
             </button>
           </div>
 
-          {/* RESULTS */}
-          {matches?.length > 0 && (
+          {/* IN-CITY RESULTS */}
+          {inCity?.length > 0 && (
             <div className="mt-8">
-              <h2 className="text-2xl font-extrabold">Suggested Roommates</h2>
-              <p className="text-black/70 text-sm">Sorted by compatibility score.</p>
+              <h2 className="text-2xl font-extrabold">
+                Matches in {form.location_city}
+              </h2>
+              <p className="text-black/70 text-sm">Sorted by compatibility.</p>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {matches.map((m) => (
-                  <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="font-bold">{m.full_name || "Gida user"}</div>
-                      <div className="text-sm px-2 py-1 rounded-full bg-black/5">
-                        Score: {Math.round(m.score)}
+                {inCity.map((m) => {
+                  const pct = toPercent(m.score);
+                  const badge = matchColor(pct);
+                  const ol = budgetOverlap(
+                    me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
+                  );
+                  return (
+                    <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
+                          Match: {pct}%
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 text-xs mt-2">
+                        <span className="px-2 py-1 rounded-full bg-black/5">Same City</span>
+                        {m.smoking && <span className="px-2 py-1 rounded-full bg-black/5">Smoking: {m.smoking}</span>}
+                        {m.schedule && <span className="px-2 py-1 rounded-full bg-black/5">Schedule: {m.schedule}</span>}
+                        <span className="px-2 py-1 rounded-full bg-black/5">Budget: {ol}</span>
+                      </div>
+
+                      <p className="text-sm text-black/70">
+                        {m.bio || "No bio yet."}
+                      </p>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => setPreview(m)}
+                          className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
+                        >
+                          View Profile
+                        </button>
+                        <button
+                          onClick={() => navigate(`/app/inbox?to=${m.candidate_id}`)}
+                          className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
+                        >
+                          Message
+                        </button>
                       </div>
                     </div>
-                    <div className="text-sm text-black/70">
-                      {m.location_city || "—"} • Cleanliness {m.cleanliness || "—"} • {m.schedule}
-                    </div>
-                    <p className="text-sm line-clamp-2">{m.bio || "No bio yet."}</p>
-
-                    <div className="flex gap-2 pt-2">
-                      <Link
-                        to={`/profile/${m.candidate_id}`}
-                        className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
-                      >
-                        View Profile
-                      </Link>
-                      <Link
-                        to={`/app/inbox?to=${m.candidate_id}`}
-                        className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
-                      >
-                        Message
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {matches?.length === 0 && !saving && (
+          {/* OUT-OF-CITY RESULTS */}
+          {city && outCity?.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-2xl font-extrabold">
+                Good Matches outside {form.location_city}
+              </h2>
+              <p className="text-black/70 text-sm">These are strong matches, but in other cities.</p>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {outCity.map((m) => {
+                  const pct = toPercent(m.score);
+                  const badge = matchColor(pct);
+                  const ol = budgetOverlap(
+                    me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
+                  );
+                  return (
+                    <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
+                          Match: {pct}%
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 text-xs mt-2">
+                        <span className="px-2 py-1 rounded-full bg-black/5">{m.location_city || "—"}</span>
+                        {m.smoking && <span className="px-2 py-1 rounded-full bg-black/5">Smoking: {m.smoking}</span>}
+                        {m.schedule && <span className="px-2 py-1 rounded-full bg-black/5">Schedule: {m.schedule}</span>}
+                        <span className="px-2 py-1 rounded-full bg-black/5">Budget: {ol}</span>
+                      </div>
+
+                      <p className="text-sm text-black/70">
+                        {m.bio || "No bio yet."}
+                      </p>
+
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => setPreview(m)}
+                          className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
+                        >
+                          View Profile
+                        </button>
+                        <button
+                          onClick={() => navigate(`/app/inbox?to=${m.candidate_id}`)}
+                          className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
+                        >
+                          Message
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* No results */}
+          {(inCity?.length === 0 && (!city || outCity?.length === 0)) && !saving && (
             <p className="mt-6 text-black/70">
               No strong matches yet. Try widening your budget or selecting “Any” for gender.
             </p>
           )}
         </div>
       </main>
+
+      {/* Profile modal */}
+      <ProfileModal data={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }
