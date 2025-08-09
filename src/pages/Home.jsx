@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-// ==== ASSETS (fallback images) ====
+// ASSETS
 import Logo from "../assets/logo.png";
 import HIWSignup from "../assets/hiw-signup.png";
 import HIWSearch from "../assets/hiw-search.png";
@@ -12,38 +12,34 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
-  const [searchText, setSearchText] = useState("");     // city/location
-  const [budgetMin, setBudgetMin] = useState("");       // GHS min
-  const [budgetMax, setBudgetMax] = useState("");       // GHS max
-  const [aiQuery, setAiQuery] = useState("");           // natural language search
+  const [city, setCity] = useState("");        // location
+  const [min, setMin] = useState("");          // GHS min
+  const [max, setMax] = useState("");          // GHS max
+  const [q, setQ] = useState("");              // natural language / keywords
 
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Destination for the inbox, depending on auth state
+  // Inbox link (auth-aware)
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
+  // auth
   useEffect(() => {
     let sub;
     (async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data?.user ?? null);
-      const res = supabase.auth.onAuthStateChange((_event, session) => {
+      sub = supabase.auth.onAuthStateChange((_ev, session) => {
         setUser(session?.user ?? null);
-      });
-      sub = res.data.subscription;
+      }).data.subscription;
     })();
     return () => sub?.unsubscribe();
   }, []);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
+  // featured
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -55,43 +51,38 @@ export default function Home() {
     load();
   }, []);
 
+  // close mobile menu on resize up
   useEffect(() => {
-    const onResize = () => {
-      if (window.innerWidth >= 768) setMobileOpen(false);
-    };
+    const onResize = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Primary search (Location + Budget range in GHS)
-  const onSearch = (e) => {
+  // Main (city + budget) search
+  const submitPrimary = (e) => {
     e.preventDefault();
-
-    // Validate range if both provided
-    if (budgetMin && budgetMax && Number(budgetMin) > Number(budgetMax)) {
-      alert("Budget min cannot be greater than budget max.");
+    if (min && max && Number(min) > Number(max)) {
+      alert("Budget Min cannot be greater than Budget Max.");
       return;
     }
-
     const params = new URLSearchParams();
-    if (searchText) params.set("city", searchText.trim());
-    if (budgetMin) params.set("min", String(Number(budgetMin)));
-    if (budgetMax) params.set("max", String(Number(budgetMax)));
-    // You can also add currency if needed, but you're using GHS by default
+    if (city.trim()) params.set("city", city.trim());
+    if (min) params.set("min", String(Number(min)));
+    if (max) params.set("max", String(Number(max)));
     navigate(`/listings?${params.toString()}`);
   };
 
-  // Natural language/AI-style search
-  const onAISearch = (e) => {
+  // AI-style / descriptive search
+  const submitAI = (e) => {
     e.preventDefault();
-    const q = aiQuery.trim();
-    if (!q) return;
-    navigate(`/listings?q=${encodeURIComponent(q)}`);
+    const query = q.trim();
+    if (!query) return;
+    navigate(`/listings?q=${encodeURIComponent(query)}`);
   };
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
-      {/* NAVBAR */}
+      {/* NAV */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -109,10 +100,7 @@ export default function Home() {
                 <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
                   View Dashboard
                 </Link>
-                <button
-                  onClick={logout}
-                  className="text-sm underline underline-offset-4 hover:opacity-70"
-                >
+                <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} className="text-sm underline underline-offset-4 hover:opacity-70">
                   Logout
                 </button>
               </div>
@@ -145,59 +133,23 @@ export default function Home() {
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link
-                to="/roommate-matching"
-                onClick={() => setMobileOpen(false)}
-                className="block rounded-lg px-3 py-2 hover:bg-black/5"
-              >
-                Roommate Matching
-              </Link>
-              <Link
-                to="/listings"
-                onClick={() => setMobileOpen(false)}
-                className="block rounded-lg px-3 py-2 hover:bg-black/5"
-              >
-                Listings
-              </Link>
-              <Link
-                to={inboxHref}
-                onClick={() => setMobileOpen(false)}
-                className="block rounded-lg px-3 py-2 hover:bg-black/5"
-              >
-                Messages
-              </Link>
-
+              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
+              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
+              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
               {user ? (
                 <>
-                  <Link
-                    to="/app/my-listings"
-                    onClick={() => setMobileOpen(false)}
-                    className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2"
-                  >
-                    View Dashboard
-                  </Link>
-                  <button
-                    onClick={() => { setMobileOpen(false); logout(); }}
-                    className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg-black/5"
-                  >
-                    Logout
-                  </button>
+                  <Link to="/app/my-listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">View Dashboard</Link>
+                  <button onClick={async () => { setMobileOpen(false); await supabase.auth.signOut(); setUser(null); }} className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg-black/5">Logout</button>
                 </>
               ) : (
-                <Link
-                  to="/auth"
-                  onClick={() => setMobileOpen(false)}
-                  className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2"
-                >
-                  Sign Up
-                </Link>
+                <Link to="/auth" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">Sign Up</Link>
               )}
             </div>
           </div>
         )}
       </nav>
 
-      {/* PAGE CONTAINER */}
+      {/* MAIN */}
       <main className="mx-auto max-w-6xl px-4">
         {/* HERO */}
         <section className="pt-12 pb-10">
@@ -206,64 +158,74 @@ export default function Home() {
             <span> find your people.</span>
           </h1>
 
-          {/* Primary Search: City + Budget Range (GHS) */}
+          {/* PRIMARY SEARCH: city + budget */}
           <form
-            onSubmit={onSearch}
-            className="mt-8 mx-auto w-full md:w-[760px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3 flex flex-col md:flex-row gap-3"
+            onSubmit={submitPrimary}
+            className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3"
           >
-            <input
-              type="text"
-              placeholder="Location (e.g., Accra, Kumasi)"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              aria-label="City"
-            />
-            <input
-              type="number"
-              placeholder="Budget Min (GHS)"
-              value={budgetMin}
-              onChange={(e) => setBudgetMin(e.target.value)}
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              aria-label="Budget Min (GHS)"
-              min="0"
-            />
-            <input
-              type="number"
-              placeholder="Budget Max (GHS)"
-              value={budgetMax}
-              onChange={(e) => setBudgetMax(e.target.value)}
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              aria-label="Budget Max (GHS)"
-              min="0"
-            />
-            <button
-              type="submit"
-              className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90"
-            >
-              Search
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
+              <label className="sr-only" htmlFor="city">City</label>
+              <input
+                id="city"
+                type="text"
+                placeholder="Location (e.g., Accra, Kumasi, East Legon)"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              />
+              <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
+              <input
+                id="min"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder="Budget Min (GHS)"
+                value={min}
+                onChange={(e) => setMin(e.target.value)}
+                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              />
+              <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
+              <input
+                id="max"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder="Budget Max (GHS)"
+                value={max}
+                onChange={(e) => setMax(e.target.value)}
+                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap"
+              >
+                Search
+              </button>
+            </div>
           </form>
 
-          {/* AI-style natural language search */}
+          {/* AI / NATURAL LANGUAGE SEARCH */}
           <form
-            onSubmit={onAISearch}
-            className="mt-3 mx-auto w-full md:w-[760px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)] flex gap-2"
+            onSubmit={submitAI}
+            className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
           >
-            <input
-              type="text"
-              placeholder='Try: "A self-contained room in East Legon under 1500 cedis, no smoking"'
-              value={aiQuery}
-              onChange={(e) => setAiQuery(e.target.value)}
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              aria-label="AI search"
-            />
-            <button
-              type="submit"
-              className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90"
-            >
-              Search by Description
-            </button>
+            <div className="flex gap-2">
+              <label className="sr-only" htmlFor="aiq">Search by description</label>
+              <input
+                id="aiq"
+                type="text"
+                placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap"
+              >
+                Search by Description
+              </button>
+            </div>
           </form>
         </section>
 

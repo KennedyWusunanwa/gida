@@ -16,17 +16,20 @@ const AMENITIES = ["Wi-Fi", "AC", "Washer", "Parking", "Kitchen"];
 export default function Listings() {
   const [params, setParams] = useSearchParams();
 
-  // Separate states for each filter
+  // Keep filter state synced with query params
   const [search, setSearch] = useState(params.get("q") || "");
   const [city, setCity] = useState(params.get("city") || "");
-  const [price, setPrice] = useState(params.get("price") || params.get("max") || "");
+  const [price, setPrice] = useState(params.get("price") || "");
   const [amenity, setAmenity] = useState(params.get("amenity") || "");
   const [gender, setGender] = useState(params.get("gender") || "");
+  const [min, setMin] = useState(params.get("min") || "");
+  const [max, setMax] = useState(params.get("max") || "");
 
   const [data, setData] = useState([]);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Handle filter submission
   const onSearch = (e) => {
     e?.preventDefault?.();
     const next = new URLSearchParams();
@@ -35,9 +38,12 @@ export default function Listings() {
     if (price) next.set("price", price);
     if (amenity) next.set("amenity", amenity);
     if (gender) next.set("gender", gender);
+    if (min) next.set("min", min);
+    if (max) next.set("max", max);
     setParams(next);
   };
 
+  // Fetch listings when filters change
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -49,38 +55,43 @@ export default function Listings() {
           "id, title, description, city, location, price, price_ghs, image_url, property_type, room_type, gender_pref, amenities, is_published, created_at"
         )
         .eq("is_published", true)
-        .order("created_at", { ascending: false })
-        .limit(24);
+        .order("created_at", { ascending: false });
 
-      // Search text (title + description)
+      // Search keyword
       const qParam = params.get("q");
       if (qParam) {
         query = query.or(`title.ilike.%${qParam}%,description.ilike.%${qParam}%`);
       }
 
-      // City filter
+      // City
       const cityParam = params.get("city");
       if (cityParam) {
         query = query.ilike("city", `%${cityParam}%`);
       }
 
-      // Price filter
-      const priceParam = params.get("price") || params.get("max");
+      // Price bucket
+      const priceParam = params.get("price");
       if (priceParam) {
         const [minStr, maxStr] = priceParam.split("-");
-        const min = minStr ? Number(minStr) : null;
-        const max = maxStr ? Number(maxStr) : null;
-        if (min !== null) query = query.gte("price_ghs", min);
-        if (max !== null) query = query.lte("price_ghs", max);
+        const minV = minStr ? Number(minStr) : null;
+        const maxV = maxStr ? Number(maxStr) : null;
+        if (minV !== null) query = query.gte("price_ghs", minV);
+        if (maxV !== null) query = query.lte("price_ghs", maxV);
       }
 
-      // Amenity filter
+      // Custom min/max from Home page
+      const minParam = params.get("min");
+      const maxParam = params.get("max");
+      if (minParam) query = query.gte("price_ghs", Number(minParam));
+      if (maxParam) query = query.lte("price_ghs", Number(maxParam));
+
+      // Amenity
       const amenityParam = params.get("amenity");
       if (amenityParam) {
         query = query.contains("amenities", [amenityParam]);
       }
 
-      // Gender filter
+      // Gender
       const genderParam = params.get("gender");
       if (genderParam) {
         query = query.eq("gender_pref", genderParam);
@@ -183,43 +194,27 @@ export default function Listings() {
 
         {/* Filters */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            className="rounded-xl border border-black/10 px-4 py-3 bg-white"
-          >
+          <select value={city} onChange={(e) => setCity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
             <option value="">Location</option>
             <option value="Accra">Accra</option>
             <option value="Kumasi">Kumasi</option>
             <option value="Takoradi">Takoradi</option>
           </select>
 
-          <select
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="rounded-xl border border-black/10 px-4 py-3 bg-white"
-          >
+          <select value={price} onChange={(e) => setPrice(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
             {PRICE_BUCKETS.map((b) => (
               <option key={b.value} value={b.value}>{b.label}</option>
             ))}
           </select>
 
-          <select
-            value={amenity}
-            onChange={(e) => setAmenity(e.target.value)}
-            className="rounded-xl border border-black/10 px-4 py-3 bg-white"
-          >
+          <select value={amenity} onChange={(e) => setAmenity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
             <option value="">Amenities</option>
             {AMENITIES.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
           </select>
 
-          <select
-            value={gender}
-            onChange={(e) => setGender(e.target.value)}
-            className="rounded-xl border border-black/10 px-4 py-3 bg-white"
-          >
+          <select value={gender} onChange={(e) => setGender(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
             <option value="">Gender pref.</option>
             <option value="Female">Female</option>
             <option value="Male">Male</option>
