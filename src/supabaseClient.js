@@ -11,6 +11,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,   // important if you use magic links
     storage: window.localStorage,
+    storageKey: "gida-auth",    // 👈 stable key across tabs/windows
     flowType: "pkce",
   },
 });
