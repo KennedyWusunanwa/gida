@@ -1,3 +1,4 @@
+// src/pages/Listings.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -16,7 +17,7 @@ const AMENITIES = ["Wi-Fi", "AC", "Washer", "Parking", "Kitchen"];
 export default function Listings() {
   const [params, setParams] = useSearchParams();
 
-  // Keep filter state synced with query params
+  // Read initial state from URL
   const [search, setSearch] = useState(params.get("q") || "");
   const [city, setCity] = useState(params.get("city") || "");
   const [price, setPrice] = useState(params.get("price") || "");
@@ -29,21 +30,45 @@ export default function Listings() {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Handle filter submission
-  const onSearch = (e) => {
-    e?.preventDefault?.();
+  // Keep state in sync if user navigates with back/forward
+  useEffect(() => {
+    setSearch(params.get("q") || "");
+    setCity(params.get("city") || "");
+    setPrice(params.get("price") || "");
+    setAmenity(params.get("amenity") || "");
+    setGender(params.get("gender") || "");
+    setMin(params.get("min") || "");
+    setMax(params.get("max") || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.toString()]);
+
+  // Apply filters to URL (single source of truth)
+  const applyFiltersToURL = () => {
     const next = new URLSearchParams();
-    if (search) next.set("q", search);
-    if (city) next.set("city", city);
+    if (search) next.set("q", search.trim());
+    if (city) next.set("city", city.trim());
     if (price) next.set("price", price);
     if (amenity) next.set("amenity", amenity);
     if (gender) next.set("gender", gender);
-    if (min) next.set("min", min);
-    if (max) next.set("max", max);
-    setParams(next);
+    if (min) next.set("min", String(min).trim());
+    if (max) next.set("max", String(max).trim());
+    setParams(next, { replace: true });
   };
 
-  // Fetch listings when filters change
+  // Submit button still works
+  const onSearch = (e) => {
+    e?.preventDefault?.();
+    applyFiltersToURL();
+  };
+
+  // Auto-apply whenever dropdowns/inputs change (with debounce for keyword)
+  useEffect(() => {
+    const t = setTimeout(() => applyFiltersToURL(), 400); // debounce for q/min/max typing
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, city, price, amenity, gender, min, max]);
+
+  // Fetch listings when URL params change
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -57,13 +82,16 @@ export default function Listings() {
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
-      // Search keyword
+      // Keyword search (escape % and _)
       const qParam = params.get("q");
       if (qParam) {
-        query = query.or(`title.ilike.%${qParam}%,description.ilike.%${qParam}%`);
+        const escaped = qParam.replace(/[%_]/g, (m) => `\\${m}`);
+        query = query.or(
+          `title.ilike.%${escaped}%,description.ilike.%${escaped}%,location.ilike.%${escaped}%`
+        );
       }
 
-      // City
+      // City (allow partial, matches your UI)
       const cityParam = params.get("city");
       if (cityParam) {
         query = query.ilike("city", `%${cityParam}%`);
@@ -75,23 +103,23 @@ export default function Listings() {
         const [minStr, maxStr] = priceParam.split("-");
         const minV = minStr ? Number(minStr) : null;
         const maxV = maxStr ? Number(maxStr) : null;
-        if (minV !== null) query = query.gte("price_ghs", minV);
-        if (maxV !== null) query = query.lte("price_ghs", maxV);
+        if (minV !== null && !Number.isNaN(minV)) query = query.gte("price_ghs", minV);
+        if (maxV !== null && !Number.isNaN(maxV)) query = query.lte("price_ghs", maxV);
       }
 
-      // Custom min/max from Home page
+      // Custom min/max (Home page handoff)
       const minParam = params.get("min");
       const maxParam = params.get("max");
-      if (minParam) query = query.gte("price_ghs", Number(minParam));
-      if (maxParam) query = query.lte("price_ghs", Number(maxParam));
+      if (minParam && !Number.isNaN(Number(minParam))) query = query.gte("price_ghs", Number(minParam));
+      if (maxParam && !Number.isNaN(Number(maxParam))) query = query.lte("price_ghs", Number(maxParam));
 
-      // Amenity
+      // Amenity (expects amenities to be text[] or JSON array)
       const amenityParam = params.get("amenity");
       if (amenityParam) {
         query = query.contains("amenities", [amenityParam]);
       }
 
-      // Gender
+      // Gender preference
       const genderParam = params.get("gender");
       if (genderParam) {
         query = query.eq("gender_pref", genderParam);
@@ -112,6 +140,11 @@ export default function Listings() {
       const title = item.title || `1 Room • ${item.city || item.location || "—"}`;
       const badge = priceValue != null ? `GH₵ ${Number(priceValue).toLocaleString()}` : null;
 
+      const img =
+        item?.image_url && item.image_url.startsWith("http")
+          ? item.image_url
+          : item?.image_url || "/images/placeholder.jpg";
+
       return (
         <Link
           to={`/listings/${item.id}`}
@@ -119,15 +152,7 @@ export default function Listings() {
           className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
         >
           <div className="relative h-52">
-            <img
-              src={
-                item.image_url?.startsWith("http")
-                  ? item.image_url
-                  : item.image_url || "/images/placeholder.jpg"
-              }
-              alt={title}
-              className="w-full h-full object-cover"
-            />
+            <img src={img} alt={title} className="w-full h-full object-cover" />
             {badge && (
               <span className="absolute top-3 right-3 bg-[#5B3A1E] text-white text-sm px-3 py-1 rounded-xl">
                 {badge}
@@ -184,6 +209,22 @@ export default function Listings() {
             placeholder="Keyword (e.g. '2 bedroom in Accra')"
             className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
+          <input
+            type="number"
+            min="0"
+            value={min}
+            onChange={(e) => setMin(e.target.value)}
+            placeholder="Min budget (GHS)"
+            className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
+          />
+          <input
+            type="number"
+            min="0"
+            value={max}
+            onChange={(e) => setMax(e.target.value)}
+            placeholder="Max budget (GHS)"
+            className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
+          />
           <button
             type="submit"
             className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95"
@@ -193,7 +234,7 @@ export default function Listings() {
         </form>
 
         {/* Filters */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
           <select value={city} onChange={(e) => setCity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
             <option value="">Location</option>
             <option value="Accra">Accra</option>
@@ -220,6 +261,8 @@ export default function Listings() {
             <option value="Male">Male</option>
             <option value="No">No</option>
           </select>
+
+          <div className="hidden md:block" />
         </div>
 
         {/* Listings Grid */}
