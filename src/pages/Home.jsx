@@ -122,17 +122,30 @@ export default function Home() {
         </div>
 
         {mobileOpen && (
-          <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
-            <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link to="/search" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
-                Find Room
-              </Link>
-              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
-                Listings
-              </Link>
-              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
-                Messages
-              </Link>
+  <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
+    <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
+      <Link
+        to="/roommate-matching"
+        onClick={() => setMobileOpen(false)}
+        className="block rounded-lg px-3 py-2 hover:bg-black/5"
+      >
+        Roommate Matching
+      </Link>
+      <Link
+        to="/listings"
+        onClick={() => setMobileOpen(false)}
+        className="block rounded-lg px-3 py-2 hover:bg-black/5"
+      >
+        Listings
+      </Link>
+      <Link
+        to={inboxHref}
+        onClick={() => setMobileOpen(false)}
+        className="block rounded-lg px-3 py-2 hover:bg-black/5"
+      >
+        Messages
+      </Link>
+
 
               {user ? (
                 <>
