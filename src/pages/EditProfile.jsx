@@ -3,10 +3,22 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 
+// UI options
 const GENDERS = ["Male", "Female", "Non-binary", "Other", "Prefer not to say"];
 const LIFESTYLES = ["Very clean", "Clean", "Average", "Laid back"];
-const SMOKING = ["Non-smoker", "Occasionally", "Smoker"];
 const PETS = ["No pets", "Cat", "Dog", "Other"];
+
+const GH_CITIES = ["Accra","Kumasi","Takoradi","Tema","Kasoa","Cape Coast","Sunyani","Ho","Tamale"];
+const SCHEDULES = [
+  { label: "Early riser", value: "early" },
+  { label: "Flexible", value: "flex" },
+  { label: "Night owl", value: "late" },
+];
+const SMOKING_UI = [
+  { label: "No smoking", value: "never" },
+  { label: "Only outside", value: "outside_only" },
+  { label: "It’s okay", value: "ok" },
+];
 
 export default function EditProfile() {
   const navigate = useNavigate();
@@ -16,19 +28,28 @@ export default function EditProfile() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
-  // Form state
+  // Core profile
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
-  const [budget, setBudget] = useState("");
+  const [budget, setBudget] = useState("");           // legacy single budget (kept)
   const [currency, setCurrency] = useState("GHS");
   const [lifestyle, setLifestyle] = useState("");
-  const [smoking, setSmoking] = useState("");
   const [pets, setPets] = useState("");
   const [about, setAbout] = useState("");
-  const [interests, setInterests] = useState(""); // comma-separated string for UI
+  const [interests, setInterests] = useState("");     // comma-separated
   const [preferredRoommates, setPreferredRoommates] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [isActive, setIsActive] = useState(true);     // NEW: toggle for roommate matching visibility
+
+  // Roommate matching fields (align with RPC)
+  const [locationCity, setLocationCity] = useState("");     // NEW
+  const [cleanliness, setCleanliness] = useState(3);        // NEW (1-5)
+  const [smoking, setSmoking] = useState("never");          // NEW (never/outside_only/ok)
+  const [schedule, setSchedule] = useState("flex");         // NEW (early/flex/late)
+  const [budgetMin, setBudgetMin] = useState("");           // NEW
+  const [budgetMax, setBudgetMax] = useState("");           // NEW
+  const [genderPref, setGenderPref] = useState("any");      // NEW
 
   // ------ Load user + profile ------
   useEffect(() => {
@@ -43,27 +64,16 @@ export default function EditProfile() {
       }
       setUser(auth.user);
 
-      // fetch or init profile
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select(
-          [
-            "id",
-            "full_name",
-            "age",
-            "gender",
-            "budget",
-            "currency",
-            "lifestyle",
-            "smoking",
-            "pets",
-            "about",
-            "interests",
-            "preferred_roommates",
-            "avatar_url",
-            "is_verified",
-          ].join(",")
-        )
+        .select([
+          "id","full_name","age","gender","budget","currency","lifestyle",
+          "pets","about","interests","preferred_roommates","avatar_url",
+          "is_verified",
+          // NEW fields used by matching
+          "is_active","location_city","cleanliness","smoking","schedule",
+          "budget_min","budget_max","gender_pref"
+        ].join(","))
         .eq("id", auth.user.id)
         .maybeSingle();
 
@@ -76,14 +86,21 @@ export default function EditProfile() {
         setBudget(profile.budget ?? "");
         setCurrency(profile.currency || "GHS");
         setLifestyle(profile.lifestyle || "");
-        setSmoking(profile.smoking || "");
         setPets(profile.pets || "");
         setAbout(profile.about || "");
-        setInterests(
-          Array.isArray(profile.interests) ? profile.interests.join(", ") : (profile.interests || "")
-        );
+        setInterests(Array.isArray(profile.interests) ? profile.interests.join(", ") : (profile.interests || ""));
         setPreferredRoommates(profile.preferred_roommates || "");
         setAvatarUrl(profile.avatar_url || "");
+
+        // NEW loads
+        setIsActive(profile.is_active ?? true);
+        setLocationCity(profile.location_city || "");
+        setCleanliness(profile.cleanliness ?? 3);
+        setSmoking(profile.smoking || "never");
+        setSchedule(profile.schedule || "flex");
+        setBudgetMin(profile.budget_min ?? "");
+        setBudgetMax(profile.budget_max ?? "");
+        setGenderPref(profile.gender_pref || "any");
       }
       setLoading(false);
     };
@@ -140,15 +157,28 @@ export default function EditProfile() {
       full_name: fullName || null,
       age: age ? Number(age) : null,
       gender: gender || null,
+
+      // Keep legacy single budget (if you still use it elsewhere)
       budget: budget ? Number(budget) : null,
       currency: currency || null,
+
       lifestyle: lifestyle || null,
-      smoking: smoking || null,
       pets: pets || null,
       about: about || null,
       interests: interestsArray.length ? interestsArray : null,
       preferred_roommates: preferredRoommates || null,
       avatar_url: avatarUrl || null,
+
+      // NEW: visibility + matching fields
+      is_active: !!isActive,
+      location_city: locationCity || null,
+      cleanliness: cleanliness ? Number(cleanliness) : 3,
+      smoking,                       // already one of: 'never' | 'outside_only' | 'ok'
+      schedule,                      // 'early' | 'flex' | 'late'
+      budget_min: budgetMin ? Number(budgetMin) : null,
+      budget_max: budgetMax ? Number(budgetMax) : null,
+      gender_pref: genderPref || "any",
+
       updated_at: new Date().toISOString(),
     };
 
@@ -164,6 +194,11 @@ export default function EditProfile() {
     }
   };
 
+  const logout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;
 
@@ -177,9 +212,9 @@ export default function EditProfile() {
             <span className="font-extrabold text-xl">Gida</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/listings" className="hover:opacity-70">Find Room</Link>
+            <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
             <Link to="/app/my-listings" className="hover:opacity-70">View Listings</Link>
-            <Link to="/auth" className="hover:opacity-70">Sign Out</Link>
+            <button onClick={logout} className="hover:opacity-70">Sign Out</button>
           </nav>
         </div>
       </header>
@@ -209,7 +244,7 @@ export default function EditProfile() {
             </label>
           </div>
 
-          {/* Right: editable fields matching the mock */}
+          {/* Right: editable fields */}
           <form onSubmit={onSave} className="bg-white rounded-3xl p-6 shadow">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <input
@@ -218,6 +253,18 @@ export default function EditProfile() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
               />
+            </div>
+
+            {/* Visibility toggle */}
+            <div className="mt-3">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                <span className="text-sm">Show my profile in roommate matching</span>
+              </label>
             </div>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -243,7 +290,8 @@ export default function EditProfile() {
                 </select>
               </Field>
 
-              <Field label="Budget">
+              {/* Legacy single budget */}
+              <Field label="Budget (single)">
                 <div className="flex gap-2">
                   <select
                     className="rounded-xl border border-black/10 px-3 py-2 bg-white"
@@ -278,18 +326,88 @@ export default function EditProfile() {
                 </select>
               </Field>
 
+              {/* NEW: City */}
+              <Field label="City">
+                <select
+                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
+                  value={locationCity}
+                  onChange={(e) => setLocationCity(e.target.value)}
+                >
+                  <option value="">Select city</option>
+                  {GH_CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+
+              {/* NEW: Cleanliness (1-5) */}
+              <Field label="Cleanliness (1–5)">
+                <input
+                  type="range" min="1" max="5" value={cleanliness}
+                  onChange={(e) => setCleanliness(e.target.value)}
+                  className="w-full"
+                />
+                <div className="text-sm mt-1">Preference: {cleanliness}/5</div>
+              </Field>
+
+              {/* NEW: Smoking */}
               <Field label="Smoking">
                 <select
                   className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
                   value={smoking}
                   onChange={(e) => setSmoking(e.target.value)}
                 >
-                  {SMOKING.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                  {SMOKING_UI.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
                   ))}
                 </select>
               </Field>
 
+              {/* NEW: Schedule */}
+              <Field label="Schedule">
+                <select
+                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
+                  value={schedule}
+                  onChange={(e) => setSchedule(e.target.value)}
+                >
+                  {SCHEDULES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </Field>
+
+              {/* NEW: Budget range */}
+              <Field label="Budget Range (GHS)">
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    className="w-full rounded-xl border border-black/10 px-3 py-2"
+                    placeholder="Min e.g. 800"
+                    value={budgetMin}
+                    onChange={(e) => setBudgetMin(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    className="w-full rounded-xl border border-black/10 px-3 py-2"
+                    placeholder="Max e.g. 2000"
+                    value={budgetMax}
+                    onChange={(e) => setBudgetMax(e.target.value)}
+                  />
+                </div>
+              </Field>
+
+              {/* NEW: Preferred roommate gender */}
+              <Field label="Preferred Roommate Gender">
+                <select
+                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
+                  value={genderPref}
+                  onChange={(e) => setGenderPref(e.target.value)}
+                >
+                  <option value="any">Any</option>
+                  <option value="male">Male only</option>
+                  <option value="female">Female only</option>
+                </select>
+              </Field>
+
+              {/* Pets (kept) */}
               <Field label="Pets">
                 <select
                   className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
@@ -325,7 +443,7 @@ export default function EditProfile() {
               </div>
 
               <div>
-                <h3 className="text-2xl font-extrabold">Preferred Roommates</h3>
+                <h3 className="text-2xl font-extrabold">Preferred Roommates (notes)</h3>
                 <input
                   className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
                   placeholder="Young professional, neat, respectful…"
