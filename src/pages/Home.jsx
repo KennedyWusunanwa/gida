@@ -19,6 +19,10 @@ export default function Home() {
   const [err, setErr] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Destination for the inbox, depending on auth state
+  const inboxPath = "/app/inbox"; // change here if your inbox route differs e.g. "/app/messages"
+  const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
+
   useEffect(() => {
     let sub;
     (async () => {
@@ -40,9 +44,7 @@ export default function Home() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const { data, error } = await supabase.rpc("get_random_featured_listings", {
-        count: 3,
-      });
+      const { data, error } = await supabase.rpc("get_random_featured_listings", { count: 3 });
       if (error) setErr(error.message);
       else setFeatured(data || []);
       setLoading(false);
@@ -79,7 +81,7 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-8">
             <Link to="/search" className="hover:opacity-70">Find Room</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
-            <Link to="/messages" className="hover:opacity-70">Messages</Link>
+            <Link to={inboxHref} className="hover:opacity-70">Messages</Link>
 
             {user ? (
               <div className="flex items-center gap-3">
@@ -128,7 +130,7 @@ export default function Home() {
               <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
                 Listings
               </Link>
-              <Link to="/messages" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
+              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
                 Messages
               </Link>
 
@@ -224,46 +226,45 @@ export default function Home() {
           {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featured.map((item) => {
-  const img = item.image_url?.startsWith("http")
-    ? item.image_url
-    : item.image_url || "/images/placeholder.jpg";
-  const price = item.price ?? item.price_ghs;
-  return (
-    <Link
-      to={`/listings/${item.id}`}
-      key={item.id}
-      className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
-    >
-      <div className="relative h-48">
-        <img src={img} alt={item.title} className="w-full h-full object-cover" />
-        {price != null && (
-          <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
-            GHC {Number(price).toLocaleString()}
-          </div>
-        )}
-      </div>
-      <div className="p-4 space-y-1">
-        <h4 className="text-base font-bold truncate">{item.title}</h4>
-        <div className="text-sm text-black/80 flex flex-col gap-0.5">
-          <div className="flex items-center gap-1">
-            <span>🛏</span>
-            <span>{item.room_type}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span>🏢</span>
-            <span>{item.property_type}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span>👤</span>
-            <span>{item.gender}</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-})}
-
+            {featured.map((item) => {
+              const img = item.image_url?.startsWith("http")
+                ? item.image_url
+                : item.image_url || "/images/placeholder.jpg";
+              const price = item.price ?? item.price_ghs;
+              return (
+                <Link
+                  to={`/listings/${item.id}`}
+                  key={item.id}
+                  className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
+                >
+                  <div className="relative h-48">
+                    <img src={img} alt={item.title} className="w-full h-full object-cover" />
+                    {price != null && (
+                      <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
+                        GHC {Number(price).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 space-y-1">
+                    <h4 className="text-base font-bold truncate">{item.title}</h4>
+                    <div className="text-sm text-black/80 flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1">
+                        <span>🛏</span>
+                        <span>{item.room_type}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>🏢</span>
+                        <span>{item.property_type}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>👤</span>
+                        <span>{item.gender}</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       </main>
