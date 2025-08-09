@@ -12,15 +12,18 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
-  const [searchText, setSearchText] = useState("");
-  const [budget, setBudget] = useState("");
+  const [searchText, setSearchText] = useState("");     // city/location
+  const [budgetMin, setBudgetMin] = useState("");       // GHS min
+  const [budgetMax, setBudgetMax] = useState("");       // GHS max
+  const [aiQuery, setAiQuery] = useState("");           // natural language search
+
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Destination for the inbox, depending on auth state
-  const inboxPath = "/app/inbox"; // change here if your inbox route differs e.g. "/app/messages"
+  const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
   useEffect(() => {
@@ -60,12 +63,30 @@ export default function Home() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Primary search (Location + Budget range in GHS)
   const onSearch = (e) => {
     e.preventDefault();
+
+    // Validate range if both provided
+    if (budgetMin && budgetMax && Number(budgetMin) > Number(budgetMax)) {
+      alert("Budget min cannot be greater than budget max.");
+      return;
+    }
+
     const params = new URLSearchParams();
-    if (searchText) params.set("city", searchText);
-    if (budget) params.set("max", budget);
+    if (searchText) params.set("city", searchText.trim());
+    if (budgetMin) params.set("min", String(Number(budgetMin)));
+    if (budgetMax) params.set("max", String(Number(budgetMax)));
+    // You can also add currency if needed, but you're using GHS by default
     navigate(`/listings?${params.toString()}`);
+  };
+
+  // Natural language/AI-style search
+  const onAISearch = (e) => {
+    e.preventDefault();
+    const q = aiQuery.trim();
+    if (!q) return;
+    navigate(`/listings?q=${encodeURIComponent(q)}`);
   };
 
   return (
@@ -122,30 +143,29 @@ export default function Home() {
         </div>
 
         {mobileOpen && (
-  <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
-    <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-      <Link
-        to="/roommate-matching"
-        onClick={() => setMobileOpen(false)}
-        className="block rounded-lg px-3 py-2 hover:bg-black/5"
-      >
-        Roommate Matching
-      </Link>
-      <Link
-        to="/listings"
-        onClick={() => setMobileOpen(false)}
-        className="block rounded-lg px-3 py-2 hover:bg-black/5"
-      >
-        Listings
-      </Link>
-      <Link
-        to={inboxHref}
-        onClick={() => setMobileOpen(false)}
-        className="block rounded-lg px-3 py-2 hover:bg-black/5"
-      >
-        Messages
-      </Link>
-
+          <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
+            <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
+              <Link
+                to="/roommate-matching"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-black/5"
+              >
+                Roommate Matching
+              </Link>
+              <Link
+                to="/listings"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-black/5"
+              >
+                Listings
+              </Link>
+              <Link
+                to={inboxHref}
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-lg px-3 py-2 hover:bg-black/5"
+              >
+                Messages
+              </Link>
 
               {user ? (
                 <>
@@ -186,29 +206,63 @@ export default function Home() {
             <span> find your people.</span>
           </h1>
 
+          {/* Primary Search: City + Budget Range (GHS) */}
           <form
             onSubmit={onSearch}
             className="mt-8 mx-auto w-full md:w-[760px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3 flex flex-col md:flex-row gap-3"
           >
             <input
               type="text"
-              placeholder="Location"
+              placeholder="Location (e.g., Accra, Kumasi)"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              aria-label="City"
             />
             <input
               type="number"
-              placeholder="Budget"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
+              placeholder="Budget Min (GHS)"
+              value={budgetMin}
+              onChange={(e) => setBudgetMin(e.target.value)}
               className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              aria-label="Budget Min (GHS)"
+              min="0"
+            />
+            <input
+              type="number"
+              placeholder="Budget Max (GHS)"
+              value={budgetMax}
+              onChange={(e) => setBudgetMax(e.target.value)}
+              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              aria-label="Budget Max (GHS)"
+              min="0"
             />
             <button
               type="submit"
               className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90"
             >
               Search
+            </button>
+          </form>
+
+          {/* AI-style natural language search */}
+          <form
+            onSubmit={onAISearch}
+            className="mt-3 mx-auto w-full md:w-[760px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)] flex gap-2"
+          >
+            <input
+              type="text"
+              placeholder='Try: "A self-contained room in East Legon under 1500 cedis, no smoking"'
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+              aria-label="AI search"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90"
+            >
+              Search by Description
             </button>
           </form>
         </section>
