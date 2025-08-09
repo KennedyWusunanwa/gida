@@ -1,4 +1,3 @@
-// src/pages/Listings.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -19,18 +18,18 @@ export default function Listings() {
 
   // Read initial state from URL
   const [search, setSearch] = useState(params.get("q") || "");
-  const [city, setCity] = useState(params.get("city") || "");
-  const [price, setPrice] = useState(params.get("price") || "");
-  const [amenity, setAmenity] = useState(params.get("amenity") || "");
+  const [city,   setCity]   = useState(params.get("city") || "");
+  const [price,  setPrice]  = useState(params.get("price") || "");
+  const [amenity,setAmenity]= useState(params.get("amenity") || "");
   const [gender, setGender] = useState(params.get("gender") || "");
-  const [min, setMin] = useState(params.get("min") || "");
-  const [max, setMax] = useState(params.get("max") || "");
+  const [min,    setMin]    = useState(params.get("min") || "");
+  const [max,    setMax]    = useState(params.get("max") || "");
 
   const [data, setData] = useState([]);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Keep state in sync if user navigates with back/forward
+  // Keep state in sync on back/forward
   useEffect(() => {
     setSearch(params.get("q") || "");
     setCity(params.get("city") || "");
@@ -42,33 +41,32 @@ export default function Listings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
 
-  // Apply filters to URL (single source of truth)
+  // Push state -> URL (single source of truth)
   const applyFiltersToURL = () => {
     const next = new URLSearchParams();
     if (search) next.set("q", search.trim());
-    if (city) next.set("city", city.trim());
-    if (price) next.set("price", price);
-    if (amenity) next.set("amenity", amenity);
+    if (city)   next.set("city", city.trim());
+    if (price)  next.set("price", price);
+    if (amenity)next.set("amenity", amenity);
     if (gender) next.set("gender", gender);
-    if (min) next.set("min", String(min).trim());
-    if (max) next.set("max", String(max).trim());
+    if (min !== "") next.set("min", String(min).trim()); // allow "0"
+    if (max !== "") next.set("max", String(max).trim());
     setParams(next, { replace: true });
   };
 
-  // Submit button still works
   const onSearch = (e) => {
     e?.preventDefault?.();
     applyFiltersToURL();
   };
 
-  // Auto-apply whenever dropdowns/inputs change (with debounce for keyword)
+  // Auto-apply with debounce for typing fields
   useEffect(() => {
-    const t = setTimeout(() => applyFiltersToURL(), 400); // debounce for q/min/max typing
+    const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, city, price, amenity, gender, min, max]);
 
-  // Fetch listings when URL params change
+  // Fetch when URL changes
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -82,7 +80,7 @@ export default function Listings() {
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
-      // Keyword search (escape % and _)
+      // Keyword
       const qParam = params.get("q");
       if (qParam) {
         const escaped = qParam.replace(/[%_]/g, (m) => `\\${m}`);
@@ -91,15 +89,25 @@ export default function Listings() {
         );
       }
 
-      // City (allow partial, matches your UI)
+      // City
       const cityParam = params.get("city");
-      if (cityParam) {
-        query = query.ilike("city", `%${cityParam}%`);
-      }
+      if (cityParam) query = query.ilike("city", `%${cityParam}%`);
 
-      // Price bucket
+      // Read explicit min/max (must respect "0")
+      const hasMin = params.has("min");
+      const hasMax = params.has("max");
+      const minParamRaw = params.get("min");
+      const maxParamRaw = params.get("max");
+
+      const effMin = hasMin ? Number(minParamRaw || 0) : null;
+      const effMax = hasMax ? Number(maxParamRaw) : null;
+
+      if (effMin !== null && !Number.isNaN(effMin)) query = query.gte("price_ghs", effMin);
+      if (effMax !== null && !Number.isNaN(effMax)) query = query.lte("price_ghs", effMax);
+
+      // Only apply price bucket if no explicit min/max
       const priceParam = params.get("price");
-      if (priceParam) {
+      if (!hasMin && !hasMax && priceParam) {
         const [minStr, maxStr] = priceParam.split("-");
         const minV = minStr ? Number(minStr) : null;
         const maxV = maxStr ? Number(maxStr) : null;
@@ -107,23 +115,13 @@ export default function Listings() {
         if (maxV !== null && !Number.isNaN(maxV)) query = query.lte("price_ghs", maxV);
       }
 
-      // Custom min/max (Home page handoff)
-      const minParam = params.get("min");
-      const maxParam = params.get("max");
-      if (minParam && !Number.isNaN(Number(minParam))) query = query.gte("price_ghs", Number(minParam));
-      if (maxParam && !Number.isNaN(Number(maxParam))) query = query.lte("price_ghs", Number(maxParam));
-
-      // Amenity (expects amenities to be text[] or JSON array)
+      // Amenity (text[] or JSON[])
       const amenityParam = params.get("amenity");
-      if (amenityParam) {
-        query = query.contains("amenities", [amenityParam]);
-      }
+      if (amenityParam) query = query.contains("amenities", [amenityParam]);
 
-      // Gender preference
+      // Gender
       const genderParam = params.get("gender");
-      if (genderParam) {
-        query = query.eq("gender_pref", genderParam);
-      }
+      if (genderParam) query = query.eq("gender_pref", genderParam);
 
       const { data, error } = await query;
       if (error) setErr(error.message);
@@ -214,7 +212,7 @@ export default function Listings() {
             min="0"
             value={min}
             onChange={(e) => setMin(e.target.value)}
-            placeholder="Min budget (GHS)"
+            placeholder="Min (GHS)"
             className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
           <input
@@ -222,7 +220,7 @@ export default function Listings() {
             min="0"
             value={max}
             onChange={(e) => setMax(e.target.value)}
-            placeholder="Max budget (GHS)"
+            placeholder="Max (GHS)"
             className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
           <button
