@@ -1,3 +1,4 @@
+// src/pages/RoommateMatching.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -15,6 +16,9 @@ export default function RoommateMatching() {
   // Profile preview modal
   const [preview, setPreview] = useState(null);
 
+  // Avatars cache: { userId: url|null }
+  const [avatars, setAvatars] = useState({});
+
   // Ghana-friendly defaults
   const [form, setForm] = useState({
     location_city: "",
@@ -26,6 +30,7 @@ export default function RoommateMatching() {
     gender_pref: "any",
   });
 
+  // auth + my profile
   useEffect(() => {
     let sub;
     (async () => {
@@ -60,6 +65,46 @@ export default function RoommateMatching() {
     return () => sub?.unsubscribe();
   }, [navigate]);
 
+  // load avatars for any listed matches
+  useEffect(() => {
+    (async () => {
+      const ids = [...new Set((matches || []).map((m) => m.candidate_id))];
+      if (!ids.length) return;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, avatar_url")
+        .in("id", ids);
+      if (!error && data) {
+        const map = {};
+        for (const r of data) map[r.id] = r.avatar_url || null;
+        setAvatars(map);
+      }
+    })();
+  }, [matches]);
+
+  const initials = (name) =>
+    (name || "")
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((s) => s[0]?.toUpperCase() || "")
+      .join("") || "G";
+
+  // open (or create) a DM with target, then jump to that convo in Inbox
+  const startMessage = async (targetUserId) => {
+    try {
+      const { data, error } = await supabase.rpc("start_or_get_dm", {
+        p_user1: user.id,
+        p_user2: targetUserId,
+      });
+      if (error) throw error;
+      const convId = typeof data === "string" ? data : data?.id || data;
+      navigate(`/app/inbox?conv=${encodeURIComponent(convId)}`);
+    } catch (_e) {
+      // fallback to old behavior if RPC missing
+      navigate(`/app/inbox?to=${encodeURIComponent(targetUserId)}`);
+    }
+  };
+
   const onChange = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const saveAndMatch = async () => {
@@ -72,8 +117,8 @@ export default function RoommateMatching() {
         cleanliness: Number(form.cleanliness) || 3,
         smoking: form.smoking,
         schedule: form.schedule,
-        budget_min: form.budget_min ? Number(form.budget_min) : null,
-        budget_max: form.budget_max ? Number(form.budget_max) : null,
+        budget_min: form.budget_min !== "" ? Number(form.budget_min) : null,
+        budget_max: form.budget_max !== "" ? Number(form.budget_max) : null,
         gender_pref: form.gender_pref,
       };
 
@@ -103,12 +148,11 @@ export default function RoommateMatching() {
     navigate("/auth");
   };
 
-  // ---------- Derived values & hooks (must be before any early return) ----------
+  // ---------- Derived values ----------
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
   const isHidden = me && me.is_active === false;
 
-  // compute min/max for score normalization
   const [minScore, maxScore] = useMemo(() => {
     if (!matches?.length) return [0, 1];
     let min = Number.POSITIVE_INFINITY, max = Number.NEGATIVE_INFINITY;
@@ -156,13 +200,13 @@ export default function RoommateMatching() {
     if (!city) return [];
     return matches.filter((m) => (m.location_city || "").trim().toLowerCase() !== city);
   }, [matches, city]);
-  // ---------------------------------------------------------------------------
 
   if (loading) return <div className="p-6">Loading…</div>;
 
   // profile preview content
   const ProfileModal = ({ data, onClose }) => {
     if (!data) return null;
+    const avatar = avatars[data.candidate_id];
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -173,8 +217,21 @@ export default function RoommateMatching() {
           >
             Close
           </button>
-          <h3 className="text-xl font-extrabold">{data.full_name || "Gida user"}</h3>
-          <p className="text-black/70 text-sm">{data.location_city || "—"}</p>
+
+          <div className="flex items-center gap-3">
+            {avatar ? (
+              <img src={avatar} alt={data.full_name || "User"} className="h-12 w-12 rounded-full object-cover" />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-[#3B2719] text-white grid place-items-center">
+                {initials(data.full_name)}
+              </div>
+            )}
+            <div>
+              <h3 className="text-xl font-extrabold">{data.full_name || "Gida user"}</h3>
+              <p className="text-black/70 text-sm">{data.location_city || "—"}</p>
+            </div>
+          </div>
+
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-xl bg-black/5 px-3 py-2">Cleanliness: {data.cleanliness ?? "—"}</div>
             <div className="rounded-xl bg-black/5 px-3 py-2">Schedule: {data.schedule || "—"}</div>
@@ -183,10 +240,12 @@ export default function RoommateMatching() {
               Budget: {(data.budget_min ?? "—")}–{(data.budget_max ?? "—")} GHS
             </div>
           </div>
+
           <p className="mt-4 text-sm">{data.bio || "No bio yet."}</p>
+
           <div className="mt-5 flex gap-2">
             <button
-              onClick={() => { onClose(); navigate(`/app/inbox?to=${data.candidate_id}`); }}
+              onClick={() => { onClose(); startMessage(data.candidate_id); }}
               className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
             >
               Message
@@ -328,7 +387,7 @@ export default function RoommateMatching() {
               <select
                 value={form.gender_pref}
                 onChange={(e) => onChange("gender_pref", e.target.value)}
-                className="w-full rounded-xl border border-black/10 px-3 py-2"
+                className="w-full rounded-XL border border-black/10 px-3 py-2"
               >
                 <option value="any">Any</option>
                 <option value="male">Male only</option>
@@ -360,10 +419,24 @@ export default function RoommateMatching() {
                   const ol = budgetOverlap(
                     me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
                   );
+                  const avatar = avatars[m.candidate_id];
                   return (
                     <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {avatar ? (
+                            <img
+                              src={avatar}
+                              alt={m.full_name || "User"}
+                              className="h-9 w-9 rounded-full object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="h-9 w-9 rounded-full bg-[#3B2719] text-white grid place-items-center text-sm flex-shrink-0">
+                              {initials(m.full_name)}
+                            </div>
+                          )}
+                          <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        </div>
                         <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
                           Match: {pct}%
                         </div>
@@ -388,7 +461,7 @@ export default function RoommateMatching() {
                           View Profile
                         </button>
                         <button
-                          onClick={() => navigate(`/app/inbox?to=${m.candidate_id}`)}
+                          onClick={() => startMessage(m.candidate_id)}
                           className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
                         >
                           Message
@@ -416,10 +489,24 @@ export default function RoommateMatching() {
                   const ol = budgetOverlap(
                     me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
                   );
+                  const avatar = avatars[m.candidate_id];
                   return (
                     <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {avatar ? (
+                            <img
+                              src={avatar}
+                              alt={m.full_name || "User"}
+                              className="h-9 w-9 rounded-full object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="h-9 w-9 rounded-full bg-[#3B2719] text-white grid place-items-center text-sm flex-shrink-0">
+                              {initials(m.full_name)}
+                            </div>
+                          )}
+                          <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+                        </div>
                         <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
                           Match: {pct}%
                         </div>
@@ -444,7 +531,7 @@ export default function RoommateMatching() {
                           View Profile
                         </button>
                         <button
-                          onClick={() => navigate(`/app/inbox?to=${m.candidate_id}`)}
+                          onClick={() => startMessage(m.candidate_id)}
                           className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
                         >
                           Message
