@@ -1,13 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import UserProtected from "./components/UserProtected";
 
-
 // Public pages
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Listings from "./pages/Listings";
 import ListingDetail from "./pages/ListingDetail";
-import RoommateMatching from "./pages/RoommateMatching"; // NEW
+import RoommateMatching from "./pages/RoommateMatching";
 
 // Debug
 import Debug from "./pages/Debug";
@@ -19,7 +18,6 @@ import AddListing from "./pages/AddListing";
 import Saved from "./pages/Saved";
 import Inbox from "./pages/Inbox";
 import EditProfile from "./pages/EditProfile";
-import Protected from "./components/Protected";
 
 // Admin dashboard
 import AdminLayout from "./admin/AdminLayout";
@@ -28,6 +26,7 @@ import AdminUsers from "./admin/pages/Users";
 import AdminListings from "./admin/pages/Listings";
 import AdminSignIn from "./admin/pages/SignIn";
 import AdminProtected from "./components/AdminProtected";
+
 
 export default function App() {
   return (

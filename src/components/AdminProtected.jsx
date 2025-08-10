@@ -1,45 +1,46 @@
-// src/components/AdminProtected.jsx
 import { Navigate, Outlet } from "react-router-dom";
+import { useSession, useSupabaseClient } from "@supabase/auth-helpers-react";
 import { useEffect, useState } from "react";
-import { useSession } from "@supabase/auth-helpers-react";
-import { supabase } from "../supabaseClient";
 
 export default function AdminProtected() {
-  const session = useSession(); // undefined during first render
+  const ctxSession = useSession();
+  const supabase = useSupabaseClient();
+  const [ready, setReady] = useState(false);
   const [ok, setOk] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
     const run = async () => {
-      if (session === undefined) return; // provider not ready yet
+      // hydrate session (same pattern as user)
+      let session = ctxSession;
+      if (session === undefined) {
+        const { data } = await supabase.auth.getSession();
+        session = data.session;
+      }
       if (!session?.user) {
-        setOk(false);
-        setLoading(false);
+        if (mounted) { setOk(false); setReady(true); }
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: profile, error } = await supabase
         .from("profiles")
         .select("is_admin")
         .eq("id", session.user.id)
         .maybeSingle();
 
-      if (!mounted) return;
-      if (error) console.error("AdminProtected profile error:", error);
-
-      setOk(data?.is_admin === true);
-      setLoading(false);
+      if (mounted) {
+        if (error) console.error("AdminProtected profile error:", error);
+        setOk(profile?.is_admin === true);
+        setReady(true);
+      }
     };
 
     run();
-    return () => {
-      mounted = false;
-    };
-  }, [session]);
+    return () => { mounted = false; };
+  }, [ctxSession, supabase]);
 
-  if (session === undefined || loading) return <p>Loading admin…</p>;
+  if (!ready) return <p>Loading admin…</p>;
   if (!ok) return <Navigate to="/admin/signin" replace />;
   return <Outlet />;
 }
