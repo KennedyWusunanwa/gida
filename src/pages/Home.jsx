@@ -25,15 +25,39 @@ export default function Home() {
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
+  // --- helpers ---
+  const display = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : v;
+
+  // extract a numeric price from common fields (handles strings like "1,500")
+  const extractPrice = (row) => {
+    const candidates = [
+      row?.price_ghs,
+      row?.price,              // some rows may still use this
+      row?.monthly_price,
+      row?.rent,
+      row?.amount,
+    ];
+    for (const v of candidates) {
+      if (v === null || v === undefined) continue;
+      const n =
+        typeof v === "number"
+          ? v
+          : Number(String(v).replace(/[^\d.]/g, "")); // strip commas/labels
+      if (Number.isFinite(n) && n > 0) return Math.round(n);
+    }
+    return null;
+  };
+
   // auth
   useEffect(() => {
     let sub;
     (async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data?.user ?? null);
-      sub = supabase.auth.onAuthStateChange((_ev, session) => {
-        setUser(session?.user ?? null);
-      }).data.subscription;
+      sub = supabase.auth
+        .onAuthStateChange((_ev, session) => setUser(session?.user ?? null))
+        .data.subscription;
     })();
     return () => sub?.unsubscribe();
   }, []);
@@ -76,9 +100,6 @@ export default function Home() {
     if (!query) return;
     navigate(`/listings?q=${encodeURIComponent(query)}`);
   };
-
-  const display = (v, fallback = "—") =>
-    v === null || v === undefined || v === "" ? fallback : v;
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
@@ -256,7 +277,7 @@ export default function Home() {
                 item?.image_url?.startsWith?.("http")
                   ? item.image_url
                   : item?.image_url || "/images/placeholder.jpg";
-              const price = item?.price_ghs ?? item?.price;
+              const priceNum = extractPrice(item);
               const cityLoc = [item?.location, item?.city].filter(Boolean).join(", ");
 
               return (
@@ -267,14 +288,16 @@ export default function Home() {
                 >
                   <div className="relative h-48">
                     <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
-                    {price != null && (
+                    {priceNum !== null && (
                       <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
-                        GH₵ {Number(price).toLocaleString()}
+                        GH₵ {priceNum.toLocaleString()}
                       </div>
                     )}
                   </div>
                   <div className="p-4 space-y-2">
-                    <h4 className="text-base font-bold truncate">{display(item?.title, "Untitled listing")}</h4>
+                    <h4 className="text-base font-bold truncate">
+                      {display(item?.title, "Untitled listing")}
+                    </h4>
                     <div className="text-sm text-black/80">{display(cityLoc)}</div>
 
                     <div className="text-sm text-black/80 grid grid-cols-1 gap-1">
