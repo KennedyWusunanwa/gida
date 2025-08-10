@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import UserProtected from "./components/UserProtected";
+
 
 // Public pages
 import Home from "./pages/Home";
@@ -45,7 +47,7 @@ export default function App() {
         <Route path="/admin/signin" element={<AdminSignIn />} />
 
         {/* USER DASHBOARD (non-admins only) */}
-        <Route element={<Protected />}>
+        <Route element={<UserProtected />}>
           <Route path="/app" element={<DashboardLayout />}>
             <Route index element={<Navigate to="my-listings" replace />} />
             <Route path="my-listings" element={<MyListings />} />
