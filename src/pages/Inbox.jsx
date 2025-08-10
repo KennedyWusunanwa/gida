@@ -24,89 +24,60 @@ export default function Inbox() {
     });
   }, []);
 
-  // ===== Fetch conversations =====
+  // ===== Fetch conversations with unread detection =====
   const fetchConvos = useCallback(async () => {
     if (!user?.id) return;
     setLoadingConvos(true);
 
-    const { data: convs, error: convErr } = await supabase
+    const { data: convs, error } = await supabase
       .from("conversations")
       .select(`
         id,
         type,
         listing_id,
         created_at,
-        conversation_participants!inner(user_id)
+        messages!messages_conversation_id_fkey(created_at),
+        conversation_participants!inner(user_id, last_read_at)
       `)
       .eq("conversation_participants.user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (convErr) {
-      console.error(convErr);
+    if (error) {
+      console.error(error);
       setConvos([]);
       setLoadingConvos(false);
       return;
     }
 
-    const ids = convs.map((c) => c.id);
-    if (ids.length === 0) {
-      setConvos([]);
-      setLoadingConvos(false);
-      return;
-    }
+    const withUnread = convs.map(c => {
+      const latestMsgTime = c.messages?.length
+        ? new Date(c.messages[c.messages.length - 1].created_at).getTime()
+        : 0;
+      const lastReadTime = c.conversation_participants?.[0]?.last_read_at
+        ? new Date(c.conversation_participants[0].last_read_at).getTime()
+        : 0;
+      return { ...c, hasUnread: latestMsgTime > lastReadTime };
+    });
 
-    const { data: parts } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", ids);
-
-    const userIds = [...new Set(parts.map((p) => p.user_id))];
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", userIds);
-
-    const profileMap = new Map((profs || []).map((p) => [p.id, p]));
-
-    const byConv = new Map();
-    for (const c of convs) byConv.set(c.id, { ...c, participants: [] });
-    for (const p of parts) {
-      const row = byConv.get(p.conversation_id);
-      if (row) {
-        row.participants.push({
-          ...p,
-          profiles: profileMap.get(p.user_id) || null,
-        });
-      }
-    }
-
-    setConvos(Array.from(byConv.values()));
+    setConvos(withUnread);
     setLoadingConvos(false);
   }, [user?.id]);
 
-  // ===== Initial fetch conversations =====
-  useEffect(() => {
-    fetchConvos();
-  }, [fetchConvos]);
+  useEffect(() => { fetchConvos(); }, [fetchConvos]);
 
-  // ===== Listen for new messages globally to update convo list =====
+  // ===== Live updates for new messages =====
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
       .channel(`global-messages:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        () => {
-          fetchConvos();
-        }
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {
+        fetchConvos();
+      })
       .subscribe();
-
     return () => supabase.removeChannel(channel);
   }, [user?.id, fetchConvos]);
 
-  // ===== Fetch messages for active conversation =====
+  // ===== Fetch messages =====
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) return;
     setLoadingMsgs(true);
@@ -137,52 +108,46 @@ export default function Inbox() {
       .in("id", senderIds);
 
     const senderMap = new Map((senders || []).map((p) => [p.id, p]));
-
-    const hydrated = msgs.map((m) => ({
-      ...m,
-      profiles: senderMap.get(m.sender_id) || null,
-    }));
+    const hydrated = msgs.map((m) => ({ ...m, profiles: senderMap.get(m.sender_id) || null }));
 
     setMessages(hydrated);
+
+    // mark as read
+    await supabase
+      .from("conversation_participants")
+      .update({ last_read_at: new Date().toISOString() })
+      .eq("conversation_id", activeId)
+      .eq("user_id", user.id);
+
     setLoadingMsgs(false);
   }, [activeId, user?.id]);
 
-  // ===== Initial fetch messages when convo changes =====
-  useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+  useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  // ===== Listen for new messages in active conversation =====
+  // ===== Live updates for active chat =====
   useEffect(() => {
     if (!activeId) return;
     const channel = supabase
       .channel(`chat:${activeId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` },
-        async () => {
-          await fetchMessages();
-          await fetchConvos();
-        }
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` }, async () => {
+        await fetchMessages();
+        await fetchConvos();
+      })
       .subscribe();
-
     return () => supabase.removeChannel(channel);
   }, [activeId, fetchMessages, fetchConvos]);
 
   // ===== Auto-scroll =====
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages.length]);
 
   const sidebarItems = useMemo(() => {
     return convos.map((c) => {
-      const other = (c.participants || []).find((p) => p.user_id !== user?.id)?.profiles;
+      const other = (c.conversation_participants || []).find((p) => p.user_id !== user?.id)?.profiles;
       const name = other?.full_name || (c.type === "support" ? "Gida Support" : "Chat");
       const avatar =
         other?.avatar_url ||
         `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
-      return { id: c.id, name, avatar, created_at: c.created_at };
+      return { id: c.id, name, avatar, created_at: c.created_at, hasUnread: c.hasUnread };
     });
   }, [convos, user?.id]);
 
@@ -204,17 +169,11 @@ export default function Inbox() {
       sender_id: user.id,
       body,
     });
-    if (error) {
-      console.error(error);
-    } else {
-      await fetchMessages();
-      await fetchConvos();
-    }
+    if (error) console.error(error);
     setText("");
     setSending(false);
   }
 
-  // ===== Render =====
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
       <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-[280px_1fr] gap-4 p-4">
@@ -236,11 +195,18 @@ export default function Inbox() {
                     }`}
                   >
                     <img src={c.avatar} alt={c.name} className="h-8 w-8 rounded-full" />
-                    <div className="flex-1">
-                      <div className="font-semibold">{c.name}</div>
-                      <div className="text-[11px] opacity-60">
-                        {new Date(c.created_at).toLocaleDateString()}
+                    <div className="flex-1 flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold">{c.name}</div>
+                        <div className="text-[11px] opacity-60">
+                          {new Date(c.created_at).toLocaleDateString()}
+                        </div>
                       </div>
+                      {c.hasUnread && (
+                        <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                          New
+                        </span>
+                      )}
                     </div>
                   </button>
                 </li>
