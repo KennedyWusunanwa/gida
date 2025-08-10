@@ -15,6 +15,7 @@ export default function ListingDetails() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [messaging, setMessaging] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false); // mobile nav
 
   useEffect(() => {
     let cancelled = false;
@@ -179,24 +180,69 @@ export default function ListingDetails() {
     <div className="min-h-screen bg-[#F7F0E6]">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
-        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
-            <span className="font-extrabold text-xl">Gida</span>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link to="/listings" className="hover:opacity-70">
-              Listings
-            </Link>
-            <Link to="/app/my-listings" className="hover:opacity-70">
-              My Listings
-            </Link>
-            <Link to="/app/inbox" className="hover:opacity-70">
-              Inbox
-            </Link>
-          </nav>
-        </div>
-      </header>
+  <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
+    <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+      <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
+      <span className="font-extrabold text-xl">Gida</span>
+    </Link>
+
+    {/* Desktop nav */}
+    <nav className="hidden md:flex items-center gap-6">
+      <Link to="/listings" className="hover:opacity-70">Listings</Link>
+      <Link to="/app/my-listings" className="hover:opacity-70">My Listings</Link>
+      <Link to="/app/inbox" className="hover:opacity-70">Inbox</Link>
+    </nav>
+
+    {/* Mobile toggle */}
+    <button
+      type="button"
+      className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
+      aria-label="Toggle menu"
+      aria-expanded={mobileOpen}
+      onClick={() => setMobileOpen((v) => !v)}
+    >
+      {mobileOpen ? (
+        // Close icon
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M6.225 4.811 4.811 6.225 10.586 12l-5.775 5.775 1.414 1.414L12 13.414l5.775 5.775 1.414-1.414L13.414 12l5.775-5.775-1.414-1.414L12 10.586 6.225 4.811z" />
+        </svg>
+      ) : (
+        // Hamburger icon
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
+        </svg>
+      )}
+    </button>
+  </div>
+
+  {/* Mobile menu panel */}
+  <div className={`${mobileOpen ? "block" : "hidden"} md:hidden border-t border-black/5`}>
+    <nav className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-3">
+      <Link
+        to="/listings"
+        className="py-2 font-medium hover:opacity-70"
+        onClick={() => setMobileOpen(false)}
+      >
+        Listings
+      </Link>
+      <Link
+        to="/app/my-listings"
+        className="py-2 font-medium hover:opacity-70"
+        onClick={() => setMobileOpen(false)}
+      >
+        My Listings
+      </Link>
+      <Link
+        to="/app/inbox"
+        className="py-2 font-medium hover:opacity-70"
+        onClick={() => setMobileOpen(false)}
+      >
+        Inbox
+      </Link>
+    </nav>
+  </div>
+</header>
+
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {/* Price + title */}
