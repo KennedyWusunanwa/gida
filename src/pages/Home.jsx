@@ -37,7 +37,6 @@ export default function Home() {
     return null;
   };
 
-  // Auth
   useEffect(() => {
     let sub;
     (async () => {
@@ -50,7 +49,7 @@ export default function Home() {
     return () => sub?.unsubscribe();
   }, []);
 
-  // Pull 6 featured listings
+  // Always fetch 6
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -91,9 +90,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
-      {/* NAV */}
+      {/* NAV (wider container, smaller side gutters) */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
-        <div className="mx-auto max-w-[1280px] px-6 h-16 flex items-center justify-between">
+        <div className="mx-auto max-w-[1400px] px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
@@ -144,10 +143,10 @@ export default function Home() {
 
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
-            <div className="px-6 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Roommate Matching</Link>
-              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Listings</Link>
-              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Messages</Link>
+            <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
+              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
+              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
+              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
               {user ? (
                 <>
                   <Link to="/app/my-listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">View Dashboard</Link>
@@ -166,43 +165,41 @@ export default function Home() {
         )}
       </nav>
 
-      {/* MAIN */}
-      <main className="mx-auto max-w-[1280px] px-6 md:py-6">
-        {/* Desktop two-column hero – wider grid to remove side emptiness */}
-        <section className="md:grid md:grid-cols-[minmax(560px,600px)_minmax(560px,1fr)] md:gap-12 items-start">
-          {/* LEFT: big headline + HIW + CTA */}
-          <div className="md:sticky md:top-20">
-            <h1 className="text-[56px] leading-[0.95] md:text-[66px] font-extrabold tracking-tight">
+      {/* MAIN – wider, minimal side margins, right column fills screen */}
+      <main className="mx-auto max-w-[1400px] px-4 py-8">
+        <section className="grid md:grid-cols-[minmax(560px,600px)_minmax(740px,1fr)] gap-12 items-start">
+          {/* LEFT: Big headline + HIW + CTA */}
+          <div>
+            <h1 className="text-[76px] leading-[0.95] font-extrabold tracking-tight">
               Find your Gida,<br />
               find your people.
             </h1>
 
-            {/* How it Works */}
-            <div className="mt-10">
-              <h2 className="text-2xl md:text-3xl font-extrabold">How it Works</h2>
-              <div className="mt-6 grid grid-cols-3 gap-6">
+            <div className="mt-12">
+              <h2 className="text-3xl font-extrabold">How it Works</h2>
+              <div className="mt-8 grid grid-cols-3 gap-10">
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSignup} alt="Sign Up" className="h-44 md:h-48 object-contain" />
-                  <p className="mt-3 text-sm md:text-base font-semibold">Sign Up</p>
+                  <img src={HIWSignup} alt="Sign Up" className="h-52 object-contain" />
+                  <p className="mt-3 text-base font-semibold">Sign Up</p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSearch} alt="Search" className="h-44 md:h-48 object-contain" />
-                  <p className="mt-3 text-sm md:text-base font-semibold">
+                  <img src={HIWSearch} alt="Search" className="h-52 object-contain" />
+                  <p className="mt-3 text-base font-semibold">
                     Search Rooms or<br />List Your Space
                   </p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWConnect} alt="Connect" className="h-44 md:h-48 object-contain" />
-                  <p className="mt-3 text-sm md:text-base font-semibold">
+                  <img src={HIWConnect} alt="Connect" className="h-52 object-contain" />
+                  <p className="mt-3 text-base font-semibold">
                     Connect<br />with Roommates or Renters
                   </p>
                 </div>
               </div>
 
-              <div className="mt-8">
+              <div className="mt-10">
                 <Link
                   to="/roommate-matching"
-                  className="inline-block rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
+                  className="inline-block rounded-xl px-7 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
                 >
                   Find a Roommate
                 </Link>
@@ -210,73 +207,71 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: search boxes + popular listings */}
-          <div className="mt-10 md:mt-1">
-            {/* PRIMARY SEARCH */}
-            <form onSubmit={submitPrimary} className="w-full bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
-              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
-                <label className="sr-only" htmlFor="city">City</label>
+          {/* RIGHT: Search pills + Popular grid */}
+          <div>
+            {/* First row of pills */}
+            <form onSubmit={submitPrimary} className="w-full">
+              <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_auto] gap-4">
                 <input
-                  id="city"
                   type="text"
-                  placeholder="Location (e.g., Accra, Kumasi, East Legon)"
+                  placeholder="Location (e.g., Accra, Kumasi, East)"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
                 <input
-                  id="min"
                   type="number"
                   inputMode="numeric"
                   min="0"
                   placeholder="Budget Min (GHS)"
                   value={min}
                   onChange={(e) => setMin(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
                 <input
-                  id="max"
                   type="number"
                   inputMode="numeric"
                   min="0"
                   placeholder="Budget Max (GHS)"
                   value={max}
                   onChange={(e) => setMax(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                <button
+                  type="submit"
+                  className="h-12 rounded-full bg-[#3B2719] text-white px-7 font-semibold hover:opacity-90 whitespace-nowrap"
+                >
                   Search
                 </button>
               </div>
             </form>
 
-            {/* AI SEARCH */}
-            <form onSubmit={submitAI} className="mt-3 w-full bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-              <div className="flex gap-2">
-                <label className="sr-only" htmlFor="aiq">Search by description</label>
+            {/* Second row of pills */}
+            <form onSubmit={submitAI} className="mt-4">
+              <div className="grid grid-cols-[1fr_auto] gap-4">
                 <input
-                  id="aiq"
                   type="text"
                   placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                <button
+                  type="submit"
+                  className="h-12 rounded-full bg-[#3B2719] text-white px-7 font-semibold hover:opacity-90 whitespace-nowrap"
+                >
                   Search by Description
                 </button>
               </div>
             </form>
 
-            {/* POPULAR LISTINGS */}
-            <section className="mt-8 pb-4">
-              <h3 className="text-2xl md:text-3xl font-extrabold">Popular Listings</h3>
+            {/* Popular listings – fixed image height to avoid stretch, 3 columns */}
+            <section className="mt-10">
+              <h3 className="text-3xl font-extrabold">Popular Listings</h3>
               {err && <p className="mt-3 text-red-600">{err}</p>}
               {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="mt-6 grid grid-cols-3 gap-6">
                 {featured.map((item) => {
                   const img =
                     item?.image_url?.startsWith?.("http")
@@ -291,20 +286,22 @@ export default function Home() {
                       key={item.id}
                       className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
                     >
-                      <div className="relative h-44 md:h-48">
+                      {/* Fixed height keeps cards uniform and prevents stretching */}
+                      <div className="relative h-48">
                         <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
                         {priceNum !== null && (
-                          <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-xs md:text-sm px-3 py-1 rounded-full">
+                          <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
                             GH₵ {priceNum.toLocaleString()}
                           </div>
                         )}
                       </div>
                       <div className="p-4 space-y-2">
-                        <h4 className="text-sm md:text-base font-bold line-clamp-1">
+                        <h4 className="text-base font-bold truncate">
                           {display(item?.title, "Untitled listing")}
                         </h4>
-                        <div className="text-xs md:text-sm text-black/80">{display(cityLoc)}</div>
-                        <div className="text-xs md:text-sm text-black/80 grid grid-cols-1 gap-1">
+                        <div className="text-sm text-black/80">{display(cityLoc)}</div>
+
+                        <div className="text-sm text-black/80 grid grid-cols-1 gap-1">
                           <div className="flex items-center gap-1">
                             <span>🛏</span>
                             <span>{display(item?.room_type)}</span>
@@ -324,10 +321,10 @@ export default function Home() {
                 })}
               </div>
 
-              <div className="mt-6 flex justify-center">
+              <div className="mt-8 flex justify-center">
                 <Link
                   to="/listings"
-                  className="rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
+                  className="rounded-xl px-7 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
                 >
                   View More
                 </Link>
@@ -339,7 +336,7 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="border-t border-black/10 py-8">
-        <div className="mx-auto max-w-[1280px] px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="mx-auto max-w-[1400px] px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-6 w-6 object-contain" />
             <span className="font-bold">Gida</span>
