@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -36,6 +37,7 @@ export default function Home() {
     return null;
   };
 
+  // Auth
   useEffect(() => {
     let sub;
     (async () => {
@@ -165,154 +167,172 @@ export default function Home() {
       </nav>
 
       {/* MAIN */}
-      <main className="mx-auto max-w-6xl px-4">
-        {/* HERO */}
-        <section className="pt-12 pb-10">
-          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight text-center">
-            Find your Gida,<br className="hidden md:block" />
-            <span> find your people.</span>
-          </h1>
+      <main className="mx-auto max-w-6xl px-4 md:py-6">
+        {/* Desktop two-column hero like screenshot */}
+        <section className="md:grid md:grid-cols-[minmax(420px,520px)_1fr] md:gap-10 items-start">
+          {/* LEFT: big headline + HIW + CTA */}
+          <div className="md:sticky md:top-20">
+            <h1 className="text-5xl md:text-[64px] leading-[0.95] font-extrabold tracking-tight">
+              Find your Gida,<br />
+              find your people.
+            </h1>
 
-          {/* PRIMARY SEARCH */}
-          <form onSubmit={submitPrimary} className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
-            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
-              <label className="sr-only" htmlFor="city">City</label>
-              <input
-                id="city"
-                type="text"
-                placeholder="Location (e.g., Accra, Kumasi, East Legon)"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
-              <input
-                id="min"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                placeholder="Budget Min (GHS)"
-                value={min}
-                onChange={(e) => setMin(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
-              <input
-                id="max"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                placeholder="Budget Max (GHS)"
-                value={max}
-                onChange={(e) => setMax(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
-                Search
-              </button>
-            </div>
-          </form>
+            {/* How it Works */}
+            <div className="mt-10">
+              <h2 className="text-2xl md:text-3xl font-extrabold">How it Works</h2>
+              <div className="mt-6 grid grid-cols-3 gap-6">
+                <div className="flex flex-col items-center text-center">
+                  <img src={HIWSignup} alt="Sign Up" className="h-44 md:h-48 object-contain" />
+                  <p className="mt-3 text-sm md:text-base font-semibold">Sign Up</p>
+                </div>
+                <div className="flex flex-col items-center text-center">
+                  <img src={HIWSearch} alt="Search" className="h-44 md:h-48 object-contain" />
+                  <p className="mt-3 text-sm md:text-base font-semibold">
+                    Search Rooms or<br />List Your Space
+                  </p>
+                </div>
+                <div className="flex flex-col items-center text-center">
+                  <img src={HIWConnect} alt="Connect" className="h-44 md:h-48 object-contain" />
+                  <p className="mt-3 text-sm md:text-base font-semibold">
+                    Connect<br />with Roommates or Renters
+                  </p>
+                </div>
+              </div>
 
-          {/* AI SEARCH */}
-          <form onSubmit={submitAI} className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-            <div className="flex gap-2">
-              <label className="sr-only" htmlFor="aiq">Search by description</label>
-              <input
-                id="aiq"
-                type="text"
-                placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
-                Search by Description
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* HOW IT WORKS (bigger images) */}
-        <section className="py-10">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-center">How it Works</h2>
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="flex flex-col items-center text-center">
-              <img src={HIWSignup} alt="Sign Up" className="h-44 md:h-52 object-contain" />
-              <p className="mt-4 text-lg font-semibold">Sign Up</p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <img src={HIWSearch} alt="Search" className="h-44 md:h-52 object-contain" />
-              <p className="mt-4 text-lg font-semibold">Search Rooms or<br />List Your Space</p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <img src={HIWConnect} alt="Connect" className="h-44 md:h-52 object-contain" />
-              <p className="mt-4 text-lg font-semibold">Connect<br />with Roommates or Renters</p>
-            </div>
-          </div>
-        </section>
-
-        {/* POPULAR LISTINGS (6 items + View More) */}
-        <section className="py-6 pb-16">
-          <h3 className="text-2xl md:text-3xl font-extrabold">Popular Listings</h3>
-          {err && <p className="mt-3 text-red-600">{err}</p>}
-          {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
-
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featured.map((item) => {
-              const img =
-                item?.image_url?.startsWith?.("http")
-                  ? item.image_url
-                  : item?.image_url || "/images/placeholder.jpg";
-              const priceNum = extractPrice(item);
-              const cityLoc = [item?.location, item?.city].filter(Boolean).join(", ");
-
-              return (
+              <div className="mt-8">
                 <Link
-                  to={`/listings/${item.id}`}
-                  key={item.id}
-                  className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
+                  to="/roommate-matching"
+                  className="inline-block rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
                 >
-                  <div className="relative h-48">
-                    <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
-                    {priceNum !== null && (
-                      <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
-                        GH₵ {priceNum.toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4 space-y-2">
-                    <h4 className="text-base font-bold truncate">
-                      {display(item?.title, "Untitled listing")}
-                    </h4>
-                    <div className="text-sm text-black/80">{display(cityLoc)}</div>
-
-                    <div className="text-sm text-black/80 grid grid-cols-1 gap-1">
-                      <div className="flex items-center gap-1">
-                        <span>🛏</span>
-                        <span>{display(item?.room_type)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span>🏢</span>
-                        <span>{display(item?.property_type)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span>👤</span>
-                        <span>{display(item?.gender_pref, "Any gender")}</span>
-                      </div>
-                    </div>
-                  </div>
+                  Find a Roommate
                 </Link>
-              );
-            })}
+              </div>
+            </div>
           </div>
 
-          <div className="mt-8 flex justify-center">
-            <Link
-              to="/listings"
-              className="rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
-            >
-              View More
-            </Link>
+          {/* RIGHT: search boxes + popular listings */}
+          <div className="mt-10 md:mt-0">
+            {/* PRIMARY SEARCH */}
+            <form onSubmit={submitPrimary} className="w-full bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
+                <label className="sr-only" htmlFor="city">City</label>
+                <input
+                  id="city"
+                  type="text"
+                  placeholder="Location (e.g., Accra, Kumasi, East Legon)"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
+                <input
+                  id="min"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  placeholder="Budget Min (GHS)"
+                  value={min}
+                  onChange={(e) => setMin(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
+                <input
+                  id="max"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  placeholder="Budget Max (GHS)"
+                  value={max}
+                  onChange={(e) => setMax(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                  Search
+                </button>
+              </div>
+            </form>
+
+            {/* AI SEARCH */}
+            <form onSubmit={submitAI} className="mt-3 w-full bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+              <div className="flex gap-2">
+                <label className="sr-only" htmlFor="aiq">Search by description</label>
+                <input
+                  id="aiq"
+                  type="text"
+                  placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                  Search by Description
+                </button>
+              </div>
+            </form>
+
+            {/* POPULAR LISTINGS */}
+            <section className="mt-8 pb-4">
+              <h3 className="text-2xl md:text-3xl font-extrabold">Popular Listings</h3>
+              {err && <p className="mt-3 text-red-600">{err}</p>}
+              {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                {featured.map((item) => {
+                  const img =
+                    item?.image_url?.startsWith?.("http")
+                      ? item.image_url
+                      : item?.image_url || "/images/placeholder.jpg";
+                  const priceNum = extractPrice(item);
+                  const cityLoc = [item?.location, item?.city].filter(Boolean).join(", ");
+
+                  return (
+                    <Link
+                      to={`/listings/${item.id}`}
+                      key={item.id}
+                      className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
+                    >
+                      <div className="relative h-44 md:h-48">
+                        <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
+                        {priceNum !== null && (
+                          <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-xs md:text-sm px-3 py-1 rounded-full">
+                            GH₵ {priceNum.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <h4 className="text-sm md:text-base font-bold line-clamp-1">
+                          {display(item?.title, "Untitled listing")}
+                        </h4>
+                        <div className="text-xs md:text-sm text-black/80">{display(cityLoc)}</div>
+                        <div className="text-xs md:text-sm text-black/80 grid grid-cols-1 gap-1">
+                          <div className="flex items-center gap-1">
+                            <span>🛏</span>
+                            <span>{display(item?.room_type)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>🏢</span>
+                            <span>{display(item?.property_type)}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span>👤</span>
+                            <span>{display(item?.gender_pref, "Any gender")}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <Link
+                  to="/listings"
+                  className="rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
+                >
+                  View More
+                </Link>
+              </div>
+            </section>
           </div>
         </section>
       </main>
@@ -324,7 +344,7 @@ export default function Home() {
             <img src={Logo} alt="Gida" className="h-6 w-6 object-contain" />
             <span className="font-bold">Gida</span>
           </div>
-          <p className="text-sm opacity-70">© {new Date().getFullYear()} Gida. All rights reserved.</p>
+        <p className="text-sm opacity-70">© {new Date().getFullYear()} Gida. All rights reserved.</p>
         </div>
       </footer>
     </div>
