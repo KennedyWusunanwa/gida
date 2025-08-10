@@ -90,7 +90,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
-      {/* NAV (drastically reduced gutters, wider max) */}
+      {/* NAV (wide container, tight gutters) */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-[1600px] px-3 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -165,11 +165,11 @@ export default function Home() {
         )}
       </nav>
 
-      {/* MAIN – even wider + tighter gutters */}
+      {/* MAIN */}
       <main className="mx-auto max-w-[1600px] px-3">
-        {/* L/R layout with bigger left column and tighter gap */}
+        {/* Two-column hero + listings */}
         <section className="pt-10 pb-8 grid md:grid-cols-[minmax(660px,760px)_minmax(780px,1fr)] gap-10 items-start">
-          {/* LEFT: Headline + BIGGER HIW with tighter spacing */}
+          {/* LEFT: Headline + HIW */}
           <div>
             <h1 className="text-[86px] leading-[0.93] font-extrabold tracking-tight">
               Find your Gida,<br />
@@ -178,7 +178,7 @@ export default function Home() {
 
             <div className="mt-10">
               <h2 className="text-3xl font-extrabold">How it Works</h2>
-              {/* bigger art, tighter gaps so it fills the left column nicely */}
+
               <div className="mt-6 grid grid-cols-3 gap-5">
                 <div className="flex flex-col items-center text-center">
                   <img src={HIWSignup} alt="Sign Up" className="h-60 xl:h-64 object-contain" />
@@ -198,7 +198,11 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Catchy title + CTA */}
               <div className="mt-8">
+                <h3 className="text-2xl md:text-3xl font-extrabold mb-3">
+                  Find your perfect roommate
+                </h3>
                 <Link
                   to="/roommate-matching"
                   className="inline-block rounded-xl px-8 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
@@ -209,9 +213,9 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: (old) card-style searches + grid */}
+          {/* RIGHT: Search cards + Popular Listings */}
           <div>
-            {/* Primary search – classic card style */}
+            {/* Primary search */}
             <form onSubmit={submitPrimary} className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
               <div className="grid grid-cols-[1.3fr_1fr_1fr_auto] gap-3 items-center">
                 <label className="sr-only" htmlFor="city">City</label>
@@ -251,7 +255,7 @@ export default function Home() {
               </div>
             </form>
 
-            {/* AI search – classic card style */}
+            {/* AI search */}
             <form onSubmit={submitAI} className="mt-3 bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
               <div className="flex gap-2">
                 <label className="sr-only" htmlFor="aiq">Search by description</label>
@@ -269,13 +273,14 @@ export default function Home() {
               </div>
             </form>
 
-            {/* Popular listings – fixed image height; 3 cols; tighter to fill column */}
+            {/* Popular listings */}
             <section className="mt-8">
               <h3 className="text-3xl font-extrabold">Popular Listings</h3>
               {err && <p className="mt-3 text-red-600">{err}</p>}
               {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
-              <div className="mt-6 grid grid-cols-3 gap-6">
+              {/* 1 column on mobile, 3 on desktop */}
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                 {featured.map((item) => {
                   const img =
                     item?.image_url?.startsWith?.("http")
