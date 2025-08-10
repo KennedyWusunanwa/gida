@@ -19,6 +19,10 @@ export default function RoommateMatching() {
   // Avatars cache: { userId: url|null }
   const [avatars, setAvatars] = useState({});
 
+  // Local filters for discovery
+  const [onlyHasPlace, setOnlyHasPlace] = useState(false);
+  const [maxShare, setMaxShare] = useState(""); // cap you're willing to pay for *their* room share (GHS)
+
   // Ghana-friendly defaults
   const [form, setForm] = useState({
     location_city: "",
@@ -28,6 +32,15 @@ export default function RoommateMatching() {
     budget_min: "",
     budget_max: "",
     gender_pref: "any",
+
+    // NEW (read-only here, edited in EditProfile, but we keep them available for preview if needed)
+    has_place: false,
+    rent_total_ghs: "",
+    split_you: "",
+    split_them: "",
+    utilities_included: false,
+    available_from: "",
+    lease_end: "",
   });
 
   // auth + my profile
@@ -57,6 +70,14 @@ export default function RoommateMatching() {
           budget_min: meProfile.budget_min ?? "",
           budget_max: meProfile.budget_max ?? "",
           gender_pref: meProfile.gender_pref ?? "any",
+
+          has_place: !!meProfile.has_place,
+          rent_total_ghs: meProfile.rent_total_ghs ?? "",
+          split_you: meProfile.split_you ?? "",
+          split_them: meProfile.split_them ?? "",
+          utilities_included: !!meProfile.utilities_included,
+          available_from: meProfile.available_from ?? "",
+          lease_end: meProfile.lease_end ?? "",
         }));
       }
       setLoading(false);
@@ -98,7 +119,7 @@ export default function RoommateMatching() {
       });
       if (error) throw error;
       const convId = typeof data === "string" ? data : data?.id || data;
-      navigate(`/app/inbox?conv=${encodeURIComponent(convId)}`);
+      navigate(`/app/inbox?c=${encodeURIComponent(convId)}`);
     } catch (_e) {
       // fallback to old behavior if RPC missing
       navigate(`/app/inbox?to=${encodeURIComponent(targetUserId)}`);
@@ -188,18 +209,53 @@ export default function RoommateMatching() {
     return "High overlap";
   };
 
+  // Your share you'd pay for THEIR place (null if not computable)
+  const calcGuestShare = (rTotal, you, them) => {
+    const rt = Number(rTotal);
+    const a = Number(you);
+    const b = Number(them);
+    if (!rt || !a || !b) return null;
+    const sum = a + b;
+    if (sum <= 0) return null;
+    // If split_you : split_them, guest (you, the viewer) would pay split_them / sum * total
+    return Math.round((rt * (b / sum)) * 100) / 100;
+  };
+
   // split matches by selected city
   const city = (form.location_city || "").trim().toLowerCase();
 
+  // Optional filter: has place + max share cap
+  const filtered = useMemo(() => {
+    let arr = matches || [];
+    if (onlyHasPlace) {
+      arr = arr.filter((m) => m.has_place === true);
+    }
+    const cap = maxShare ? Number(maxShare) : null;
+    if (cap && cap > 0) {
+      arr = arr.filter((m) => {
+        const gs = calcGuestShare(m.rent_total_ghs, m.split_you, m.split_them);
+        return gs == null || gs <= cap; // keep if unknown OR within cap
+      });
+    }
+    // Sort: people-with-place first, then score desc
+    arr = [...arr].sort((a, b) => {
+      if (!!b.has_place - !!a.has_place !== 0) return (!!b.has_place - !!a.has_place);
+      const sA = toPercent(a.score);
+      const sB = toPercent(b.score);
+      return sB - sA;
+    });
+    return arr;
+  }, [matches, onlyHasPlace, maxShare]);
+
   const inCity = useMemo(() => {
-    if (!city) return matches;
-    return matches.filter((m) => (m.location_city || "").trim().toLowerCase() === city);
-  }, [matches, city]);
+    if (!city) return filtered;
+    return filtered.filter((m) => (m.location_city || "").trim().toLowerCase() === city);
+  }, [filtered, city]);
 
   const outCity = useMemo(() => {
     if (!city) return [];
-    return matches.filter((m) => (m.location_city || "").trim().toLowerCase() !== city);
-  }, [matches, city]);
+    return filtered.filter((m) => (m.location_city || "").trim().toLowerCase() !== city);
+  }, [filtered, city]);
 
   if (loading) return <div className="p-6">Loading…</div>;
 
@@ -207,6 +263,7 @@ export default function RoommateMatching() {
   const ProfileModal = ({ data, onClose }) => {
     if (!data) return null;
     const avatar = avatars[data.candidate_id];
+    const guestShare = calcGuestShare(data.rent_total_ghs, data.split_you, data.split_them);
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -241,6 +298,20 @@ export default function RoommateMatching() {
             </div>
           </div>
 
+          {data.has_place && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 p-3 text-sm">
+              <div className="font-semibold">Has a place to share</div>
+              <div>Total rent: {Number(data.rent_total_ghs || 0).toLocaleString()} GHS / mo</div>
+              {(data.split_you && data.split_them) && (
+                <div>Split ratio: {data.split_you}:{data.split_them}</div>
+              )}
+              {guestShare != null && (
+                <div>Your estimated share: <b>{guestShare.toLocaleString()} GHS</b> / mo</div>
+              )}
+              {data.utilities_included ? <div>Utilities included</div> : <div>Utilities not included</div>}
+            </div>
+          )}
+
           <p className="mt-4 text-sm">{data.bio || "No bio yet."}</p>
 
           <div className="mt-5 flex gap-2">
@@ -251,6 +322,73 @@ export default function RoommateMatching() {
               Message
             </button>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ---- card renderer helper
+  const MatchCard = ({ m, inSameCity }) => {
+    const pct = toPercent(m.score);
+    const badge = matchColor(pct);
+    const ol = budgetOverlap(me?.budget_min, me?.budget_max, m.budget_min, m.budget_max);
+    const avatar = avatars[m.candidate_id];
+    const guestShare = calcGuestShare(m.rent_total_ghs, m.split_you, m.split_them);
+
+    return (
+      <div className="bg-white rounded-2xl p-4 shadow space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            {avatar ? (
+              <img
+                src={avatar}
+                alt={m.full_name || "User"}
+                className="h-9 w-9 rounded-full object-cover flex-shrink-0"
+              />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-[#3B2719] text-white grid place-items-center text-sm flex-shrink-0">
+                {initials(m.full_name)}
+              </div>
+            )}
+            <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
+          </div>
+          <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>Match: {pct}%</div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs mt-2">
+          <span className="px-2 py-1 rounded-full bg-black/5">
+            {inSameCity ? "Same City" : (m.location_city || "—")}
+          </span>
+          {m.smoking && <span className="px-2 py-1 rounded-full bg-black/5">Smoking: {m.smoking}</span>}
+          {m.schedule && <span className="px-2 py-1 rounded-full bg-black/5">Schedule: {m.schedule}</span>}
+          <span className="px-2 py-1 rounded-full bg-black/5">Budget: {ol}</span>
+          {m.has_place && (
+            <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+              Has a place
+            </span>
+          )}
+          {m.has_place && guestShare != null && (
+            <span className="px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200">
+              Your share ≈ {guestShare.toLocaleString()} GHS
+            </span>
+          )}
+        </div>
+
+        <p className="text-sm text-black/70">{m.bio || "No bio yet."}</p>
+
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={() => setPreview(m)}
+            className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
+          >
+            View Profile
+          </button>
+          <button
+            onClick={() => startMessage(m.candidate_id)}
+            className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
+          >
+            Message
+          </button>
         </div>
       </div>
     );
@@ -387,7 +525,7 @@ export default function RoommateMatching() {
               <select
                 value={form.gender_pref}
                 onChange={(e) => onChange("gender_pref", e.target.value)}
-                className="w-full rounded-XL border border-black/10 px-3 py-2"
+                className="w-full rounded-xl border border-black/10 px-3 py-2"
               >
                 <option value="any">Any</option>
                 <option value="male">Male only</option>
@@ -404,72 +542,36 @@ export default function RoommateMatching() {
             </button>
           </div>
 
+          {/* Local discovery filters */}
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={onlyHasPlace} onChange={(e)=>setOnlyHasPlace(e.target.checked)} />
+              Only show people who already have a place
+            </label>
+            <div className="flex items-center gap-2">
+              <span>Max share I can pay (GHS)</span>
+              <input
+                type="number"
+                className="w-28 rounded-xl border border-black/10 px-3 py-1.5"
+                value={maxShare}
+                onChange={(e)=>setMaxShare(e.target.value)}
+                placeholder="e.g. 1200"
+              />
+            </div>
+          </div>
+
           {/* IN-CITY RESULTS */}
           {inCity?.length > 0 && (
             <div className="mt-8">
               <h2 className="text-2xl font-extrabold">
                 Matches in {form.location_city}
               </h2>
-              <p className="text-black/70 text-sm">Sorted by compatibility.</p>
+              <p className="text-black/70 text-sm">Sorted by compatibility (people with a place are shown first).</p>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {inCity.map((m) => {
-                  const pct = toPercent(m.score);
-                  const badge = matchColor(pct);
-                  const ol = budgetOverlap(
-                    me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
-                  );
-                  const avatar = avatars[m.candidate_id];
-                  return (
-                    <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {avatar ? (
-                            <img
-                              src={avatar}
-                              alt={m.full_name || "User"}
-                              className="h-9 w-9 rounded-full object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="h-9 w-9 rounded-full bg-[#3B2719] text-white grid place-items-center text-sm flex-shrink-0">
-                              {initials(m.full_name)}
-                            </div>
-                          )}
-                          <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
-                        </div>
-                        <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
-                          Match: {pct}%
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 text-xs mt-2">
-                        <span className="px-2 py-1 rounded-full bg-black/5">Same City</span>
-                        {m.smoking && <span className="px-2 py-1 rounded-full bg-black/5">Smoking: {m.smoking}</span>}
-                        {m.schedule && <span className="px-2 py-1 rounded-full bg-black/5">Schedule: {m.schedule}</span>}
-                        <span className="px-2 py-1 rounded-full bg-black/5">Budget: {ol}</span>
-                      </div>
-
-                      <p className="text-sm text-black/70">
-                        {m.bio || "No bio yet."}
-                      </p>
-
-                      <div className="flex gap-2 pt-2">
-                        <button
-                          onClick={() => setPreview(m)}
-                          className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
-                        >
-                          View Profile
-                        </button>
-                        <button
-                          onClick={() => startMessage(m.candidate_id)}
-                          className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
-                        >
-                          Message
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {inCity.map((m) => (
+                  <MatchCard key={m.candidate_id} m={m} inSameCity />
+                ))}
               </div>
             </div>
           )}
@@ -483,63 +585,9 @@ export default function RoommateMatching() {
               <p className="text-black/70 text-sm">These are strong matches, but in other cities.</p>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {outCity.map((m) => {
-                  const pct = toPercent(m.score);
-                  const badge = matchColor(pct);
-                  const ol = budgetOverlap(
-                    me?.budget_min, me?.budget_max, m.budget_min, m.budget_max
-                  );
-                  const avatar = avatars[m.candidate_id];
-                  return (
-                    <div key={m.candidate_id} className="bg-white rounded-2xl p-4 shadow space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {avatar ? (
-                            <img
-                              src={avatar}
-                              alt={m.full_name || "User"}
-                              className="h-9 w-9 rounded-full object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="h-9 w-9 rounded-full bg-[#3B2719] text-white grid place-items-center text-sm flex-shrink-0">
-                              {initials(m.full_name)}
-                            </div>
-                          )}
-                          <div className="font-bold truncate">{m.full_name || "Gida user"}</div>
-                        </div>
-                        <div className={`text-sm px-2 py-1 rounded-full border ${badge}`}>
-                          Match: {pct}%
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 text-xs mt-2">
-                        <span className="px-2 py-1 rounded-full bg-black/5">{m.location_city || "—"}</span>
-                        {m.smoking && <span className="px-2 py-1 rounded-full bg-black/5">Smoking: {m.smoking}</span>}
-                        {m.schedule && <span className="px-2 py-1 rounded-full bg-black/5">Schedule: {m.schedule}</span>}
-                        <span className="px-2 py-1 rounded-full bg-black/5">Budget: {ol}</span>
-                      </div>
-
-                      <p className="text-sm text-black/70">
-                        {m.bio || "No bio yet."}
-                      </p>
-
-                      <div className="flex gap-2 pt-2">
-                        <button
-                          onClick={() => setPreview(m)}
-                          className="rounded-xl px-4 py-2 border border-black/10 hover:bg-black/5"
-                        >
-                          View Profile
-                        </button>
-                        <button
-                          onClick={() => startMessage(m.candidate_id)}
-                          className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90"
-                        >
-                          Message
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {outCity.map((m) => (
+                  <MatchCard key={m.candidate_id} m={m} />
+                ))}
               </div>
             </div>
           )}

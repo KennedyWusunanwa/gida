@@ -1,13 +1,12 @@
+// src/pages/EditProfile.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 
-// UI options
 const GENDERS = ["Male", "Female", "Non-binary", "Other", "Prefer not to say"];
 const LIFESTYLES = ["Very clean", "Clean", "Average", "Laid back"];
 const PETS = ["No pets", "Cat", "Dog", "Other"];
-
 const GH_CITIES = ["Accra","Kumasi","Takoradi","Tema","Kasoa","Cape Coast","Sunyani","Ho","Tamale"];
 const SCHEDULES = [
   { label: "Early riser", value: "early" },
@@ -32,53 +31,54 @@ export default function EditProfile() {
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("");
-  const [budget, setBudget] = useState("");           // legacy single budget (kept)
+  const [budget, setBudget] = useState("");           // legacy single budget
   const [currency, setCurrency] = useState("GHS");
   const [lifestyle, setLifestyle] = useState("");
   const [pets, setPets] = useState("");
   const [about, setAbout] = useState("");
-  const [interests, setInterests] = useState("");     // comma-separated
+  const [interests, setInterests] = useState("");
   const [preferredRoommates, setPreferredRoommates] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
-  const [isActive, setIsActive] = useState(true);     // NEW: toggle for roommate matching visibility
+  const [isActive, setIsActive] = useState(true);
 
-  // Roommate matching fields (align with RPC)
-  const [locationCity, setLocationCity] = useState("");     // NEW
-  const [cleanliness, setCleanliness] = useState(3);        // NEW (1-5)
-  const [smoking, setSmoking] = useState("never");          // NEW (never/outside_only/ok)
-  const [schedule, setSchedule] = useState("flex");         // NEW (early/flex/late)
-  const [budgetMin, setBudgetMin] = useState("");           // NEW
-  const [budgetMax, setBudgetMax] = useState("");           // NEW
-  const [genderPref, setGenderPref] = useState("any");      // NEW
+  // Roommate matching fields
+  const [locationCity, setLocationCity] = useState("");
+  const [cleanliness, setCleanliness] = useState(3);
+  const [smoking, setSmoking] = useState("never");
+  const [schedule, setSchedule] = useState("flex");
+  const [budgetMin, setBudgetMin] = useState("");
+  const [budgetMax, setBudgetMax] = useState("");
+  const [genderPref, setGenderPref] = useState("any");
 
-  // ------ Load user + profile ------
+  // NEW: have-a-place fields
+  const [hasPlace, setHasPlace] = useState(false);
+  const [rentTotal, setRentTotal] = useState("");
+  const [splitYou, setSplitYou] = useState("");
+  const [splitThem, setSplitThem] = useState("");
+  const [utilitiesIncluded, setUtilitiesIncluded] = useState(false);
+  const [availableFrom, setAvailableFrom] = useState("");
+  const [leaseEnd, setLeaseEnd] = useState("");
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setErr(null);
 
       const { data: auth } = await supabase.auth.getUser();
-      if (!auth?.user) {
-        navigate("/auth");
-        return;
-      }
+      if (!auth?.user) { navigate("/auth"); return; }
       setUser(auth.user);
 
       const { data: profile, error } = await supabase
         .from("profiles")
-        .select([
-          "id","full_name","age","gender","budget","currency","lifestyle",
-          "pets","about","interests","preferred_roommates","avatar_url",
-          "is_verified",
-          // NEW fields used by matching
-          "is_active","location_city","cleanliness","smoking","schedule",
-          "budget_min","budget_max","gender_pref"
-        ].join(","))
+        .select(`
+          id,full_name,age,gender,budget,currency,lifestyle,pets,about,interests,preferred_roommates,avatar_url,
+          is_active,location_city,cleanliness,smoking,schedule,budget_min,budget_max,gender_pref,
+          has_place,rent_total_ghs,split_you,split_them,utilities_included,available_from,lease_end
+        `)
         .eq("id", auth.user.id)
         .maybeSingle();
 
       if (error) setErr(error.message);
-
       if (profile) {
         setFullName(profile.full_name || "");
         setAge(profile.age ?? "");
@@ -92,7 +92,6 @@ export default function EditProfile() {
         setPreferredRoommates(profile.preferred_roommates || "");
         setAvatarUrl(profile.avatar_url || "");
 
-        // NEW loads
         setIsActive(profile.is_active ?? true);
         setLocationCity(profile.location_city || "");
         setCleanliness(profile.cleanliness ?? 3);
@@ -101,6 +100,15 @@ export default function EditProfile() {
         setBudgetMin(profile.budget_min ?? "");
         setBudgetMax(profile.budget_max ?? "");
         setGenderPref(profile.gender_pref || "any");
+
+        // NEW
+        setHasPlace(!!profile.has_place);
+        setRentTotal(profile.rent_total_ghs ?? "");
+        setSplitYou(profile.split_you ?? "");
+        setSplitThem(profile.split_them ?? "");
+        setUtilitiesIncluded(!!profile.utilities_included);
+        setAvailableFrom(profile.available_from ?? "");
+        setLeaseEnd(profile.lease_end ?? "");
       }
       setLoading(false);
     };
@@ -118,18 +126,23 @@ export default function EditProfile() {
     }).format(amt) + "/month";
   }, [budget, currency]);
 
-  // ------ Avatar upload ------
+  const guestShare = useMemo(() => {
+    const rt = Number(rentTotal);
+    const a = Number(splitYou);
+    const b = Number(splitThem);
+    if (!hasPlace || !rt || !a || !b || a + b <= 0) return null;
+    return Math.round((rt * (b / (a + b))) * 100) / 100;
+  }, [hasPlace, rentTotal, splitYou, splitThem]);
+
   const onAvatarChange = async (file) => {
     if (!file || !user) return;
     try {
       const ext = file.name.split(".").pop();
       const path = `${user.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
+        cacheControl: "3600", upsert: false,
       });
       if (upErr) throw upErr;
-
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
       const url = data.publicUrl;
       setAvatarUrl(url);
@@ -139,7 +152,6 @@ export default function EditProfile() {
     }
   };
 
-  // ------ Save profile ------
   const onSave = async (e) => {
     e?.preventDefault?.();
     if (!user) return navigate("/auth");
@@ -147,21 +159,15 @@ export default function EditProfile() {
     setErr(null);
 
     const interestsArray =
-      interests
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean) || [];
+      interests.split(",").map((t) => t.trim()).filter(Boolean) || [];
 
     const payload = {
       id: user.id,
       full_name: fullName || null,
       age: age ? Number(age) : null,
       gender: gender || null,
-
-      // Keep legacy single budget (if you still use it elsewhere)
       budget: budget ? Number(budget) : null,
       currency: currency || null,
-
       lifestyle: lifestyle || null,
       pets: pets || null,
       about: about || null,
@@ -169,21 +175,28 @@ export default function EditProfile() {
       preferred_roommates: preferredRoommates || null,
       avatar_url: avatarUrl || null,
 
-      // NEW: visibility + matching fields
       is_active: !!isActive,
       location_city: locationCity || null,
       cleanliness: cleanliness ? Number(cleanliness) : 3,
-      smoking,                       // already one of: 'never' | 'outside_only' | 'ok'
-      schedule,                      // 'early' | 'flex' | 'late'
+      smoking,
+      schedule,
       budget_min: budgetMin ? Number(budgetMin) : null,
       budget_max: budgetMax ? Number(budgetMax) : null,
       gender_pref: genderPref || "any",
+
+      // NEW
+      has_place: !!hasPlace,
+      rent_total_ghs: rentTotal ? Number(rentTotal) : null,
+      split_you: splitYou ? Number(splitYou) : null,
+      split_them: splitThem ? Number(splitThem) : null,
+      utilities_included: !!utilitiesIncluded,
+      available_from: availableFrom || null,
+      lease_end: leaseEnd || null,
 
       updated_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
-
     setSaving(false);
     if (error) {
       console.error(error);
@@ -231,16 +244,9 @@ export default function EditProfile() {
                 <div className="opacity-50">No photo</div>
               )}
             </div>
-            <label
-              className="mt-4 inline-block cursor-pointer rounded-xl border border-black/10 px-4 py-2 text-sm font-semibold hover:bg-black/5"
-            >
+            <label className="mt-4 inline-block cursor-pointer rounded-xl border border-black/10 px-4 py-2 text-sm font-semibold hover:bg-black/5">
               Upload photo
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => onAvatarChange(e.target.files?.[0])}
-              />
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => onAvatarChange(e.target.files?.[0])}/>
             </label>
           </div>
 
@@ -258,222 +264,166 @@ export default function EditProfile() {
             {/* Visibility toggle */}
             <div className="mt-3">
               <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
-                />
+                <input type="checkbox" checked={!!isActive} onChange={(e) => setIsActive(e.target.checked)} />
                 <span className="text-sm">Show my profile in roommate matching</span>
               </label>
             </div>
 
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <Field label="Age">
-                <input
-                  type="number"
-                  className="w-full rounded-xl border border-black/10 px-3 py-2"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                />
+                <input type="number" className="w-full rounded-xl border border-black/10 px-3 py-2" value={age} onChange={(e) => setAge(e.target.value)} />
               </Field>
 
               <Field label="Gender">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                >
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={gender} onChange={(e) => setGender(e.target.value)}>
                   <option value="">Select</option>
-                  {GENDERS.map((g) => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
+                  {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
                 </select>
               </Field>
 
               {/* Legacy single budget */}
               <Field label="Budget (single)">
                 <div className="flex gap-2">
-                  <select
-                    className="rounded-xl border border-black/10 px-3 py-2 bg-white"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                  >
-                    <option>GHS</option>
-                    <option>USD</option>
-                    <option>EUR</option>
+                  <select className="rounded-xl border border-black/10 px-3 py-2 bg-white" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                    <option>GHS</option><option>USD</option><option>EUR</option>
                   </select>
-                  <input
-                    type="number"
-                    className="flex-1 rounded-xl border border-black/10 px-3 py-2"
-                    placeholder="e.g. 1500"
-                    value={budget}
-                    onChange={(e) => setBudget(e.target.value)}
-                  />
+                  <input type="number" className="flex-1 rounded-xl border border-black/10 px-3 py-2" placeholder="e.g. 1500" value={budget} onChange={(e) => setBudget(e.target.value)} />
                 </div>
                 {badgeBudget && <div className="mt-1 text-sm text-black/70">{badgeBudget}</div>}
               </Field>
 
               <Field label="Lifestyle">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={lifestyle}
-                  onChange={(e) => setLifestyle(e.target.value)}
-                >
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={lifestyle} onChange={(e) => setLifestyle(e.target.value)}>
                   <option value="">Select</option>
-                  {LIFESTYLES.map((l) => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
+                  {LIFESTYLES.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               </Field>
 
-              {/* NEW: City */}
+              {/* City */}
               <Field label="City">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={locationCity}
-                  onChange={(e) => setLocationCity(e.target.value)}
-                >
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={locationCity} onChange={(e) => setLocationCity(e.target.value)}>
                   <option value="">Select city</option>
                   {GH_CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
 
-              {/* NEW: Cleanliness (1-5) */}
               <Field label="Cleanliness (1–5)">
-                <input
-                  type="range" min="1" max="5" value={cleanliness}
-                  onChange={(e) => setCleanliness(e.target.value)}
-                  className="w-full"
-                />
+                <input type="range" min="1" max="5" value={cleanliness} onChange={(e) => setCleanliness(e.target.value)} className="w-full" />
                 <div className="text-sm mt-1">Preference: {cleanliness}/5</div>
               </Field>
 
-              {/* NEW: Smoking */}
               <Field label="Smoking">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={smoking}
-                  onChange={(e) => setSmoking(e.target.value)}
-                >
-                  {SMOKING_UI.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={smoking} onChange={(e) => setSmoking(e.target.value)}>
+                  {SMOKING_UI.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </Field>
 
-              {/* NEW: Schedule */}
               <Field label="Schedule">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={schedule}
-                  onChange={(e) => setSchedule(e.target.value)}
-                >
-                  {SCHEDULES.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={schedule} onChange={(e) => setSchedule(e.target.value)}>
+                  {SCHEDULES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </Field>
 
-              {/* NEW: Budget range */}
               <Field label="Budget Range (GHS)">
                 <div className="flex gap-2">
-                  <input
-                    type="number"
-                    className="w-full rounded-xl border border-black/10 px-3 py-2"
-                    placeholder="Min e.g. 800"
-                    value={budgetMin}
-                    onChange={(e) => setBudgetMin(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    className="w-full rounded-xl border border-black/10 px-3 py-2"
-                    placeholder="Max e.g. 2000"
-                    value={budgetMax}
-                    onChange={(e) => setBudgetMax(e.target.value)}
-                  />
+                  <input type="number" className="w-full rounded-xl border border-black/10 px-3 py-2" placeholder="Min e.g. 800" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} />
+                  <input type="number" className="w-full rounded-xl border border-black/10 px-3 py-2" placeholder="Max e.g. 2000" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
                 </div>
               </Field>
 
-              {/* NEW: Preferred roommate gender */}
               <Field label="Preferred Roommate Gender">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={genderPref}
-                  onChange={(e) => setGenderPref(e.target.value)}
-                >
+                <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={genderPref} onChange={(e) => setGenderPref(e.target.value)}>
                   <option value="any">Any</option>
                   <option value="male">Male only</option>
                   <option value="female">Female only</option>
                 </select>
               </Field>
+            </div>
 
-              {/* Pets (kept) */}
-              <Field label="Pets">
-                <select
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white"
-                  value={pets}
-                  onChange={(e) => setPets(e.target.value)}
-                >
-                  {PETS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </Field>
+            {/* NEW: I already have a place */}
+            <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={hasPlace} onChange={(e)=>setHasPlace(e.target.checked)} />
+                <span className="font-semibold">I already have a place and want a roommate to split the rent</span>
+              </label>
+
+              {hasPlace && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Total monthly rent (GHS)">
+                    <input type="number" className="w-full rounded-xl border border-black/10 px-3 py-2"
+                      value={rentTotal} onChange={(e)=>setRentTotal(e.target.value)} />
+                  </Field>
+
+                  <Field label="Split ratio (Me : Roommate)">
+                    <div className="flex items-center gap-2">
+                      <input type="number" className="w-20 rounded-xl border border-black/10 px-3 py-2"
+                        value={splitYou} onChange={(e)=>setSplitYou(e.target.value)} placeholder="e.g. 1" />
+                      <span>:</span>
+                      <input type="number" className="w-20 rounded-xl border border-black/10 px-3 py-2"
+                        value={splitThem} onChange={(e)=>setSplitThem(e.target.value)} placeholder="e.g. 1" />
+                    </div>
+                  </Field>
+
+                  <Field label="Available from">
+                    <input type="date" className="w-full rounded-xl border border-black/10 px-3 py-2"
+                      value={availableFrom || ""} onChange={(e)=>setAvailableFrom(e.target.value)} />
+                  </Field>
+
+                  <Field label="Lease end">
+                    <input type="date" className="w-full rounded-xl border border-black/10 px-3 py-2"
+                      value={leaseEnd || ""} onChange={(e)=>setLeaseEnd(e.target.value)} />
+                  </Field>
+
+                  <div className="md:col-span-2">
+                    <label className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={utilitiesIncluded} onChange={(e)=>setUtilitiesIncluded(e.target.checked)} />
+                      <span>Utilities included</span>
+                    </label>
+                  </div>
+
+                  {guestShare != null && (
+                    <div className="md:col-span-2 text-sm">
+                      A future roommate would pay about <b>{guestShare.toLocaleString()} GHS</b> per month (rent only).
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* About */}
             <h3 className="mt-8 text-2xl font-extrabold">About Me</h3>
-            <textarea
-              className="mt-3 w-full min-h-[120px] rounded-xl border border-black/10 px-3 py-2"
-              placeholder="Tell us a bit about yourself…"
-              value={about}
-              onChange={(e) => setAbout(e.target.value)}
-            />
+            <textarea className="mt-3 w/full min-h-[120px] rounded-xl border border-black/10 px-3 py-2"
+              placeholder="Tell us a bit about yourself…" value={about} onChange={(e) => setAbout(e.target.value)} />
 
             {/* Interests + Preferred Roommates */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="text-2xl font-extrabold">Interests</h3>
-                <input
-                  className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
-                  placeholder="Comma separated (e.g., Cooking, hiking, movies)"
-                  value={interests}
-                  onChange={(e) => setInterests(e.target.value)}
-                />
+                <input className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
+                  placeholder="Comma separated (e.g., Cooking, hiking, movies)" value={interests}
+                  onChange={(e) => setInterests(e.target.value)} />
               </div>
 
               <div>
                 <h3 className="text-2xl font-extrabold">Preferred Roommates (notes)</h3>
-                <input
-                  className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
-                  placeholder="Young professional, neat, respectful…"
-                  value={preferredRoommates}
-                  onChange={(e) => setPreferredRoommates(e.target.value)}
-                />
+                <input className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
+                  placeholder="Young professional, neat, respectful…" value={preferredRoommates}
+                  onChange={(e) => setPreferredRoommates(e.target.value)} />
               </div>
             </div>
 
             {/* Actions */}
             <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95 disabled:opacity-60"
-              >
+              <button type="submit" disabled={saving}
+                className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95 disabled:opacity-60">
                 {saving ? "Saving…" : "Save Profile"}
               </button>
 
-              <Link
-                to="/app/inbox"
-                className="rounded-xl border border-black/10 px-6 py-3 font-semibold hover:bg-black/5"
-              >
+              <Link to="/app/inbox" className="rounded-xl border border-black/10 px-6 py-3 font-semibold hover:bg-black/5">
                 Message
               </Link>
 
-              <Link
-                to="/app/my-listings"
-                className="rounded-xl border border-black/10 px-6 py-3 font-semibold hover:bg-black/5"
-              >
+              <Link to="/app/my-listings" className="rounded-xl border border-black/10 px-6 py-3 font-semibold hover:bg-black/5">
                 View Listings
               </Link>
             </div>
