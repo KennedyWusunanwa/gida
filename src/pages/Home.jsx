@@ -49,7 +49,7 @@ export default function Home() {
     return () => sub?.unsubscribe();
   }, []);
 
-  // Always fetch 6
+  // Fetch 6 featured listings
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -90,9 +90,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
-      {/* NAV (wider container, smaller side gutters) */}
+      {/* NAV (drastically reduced gutters, wider max) */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
-        <div className="mx-auto max-w-[1400px] px-4 h-16 flex items-center justify-between">
+        <div className="mx-auto max-w-[1600px] px-3 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
@@ -165,41 +165,43 @@ export default function Home() {
         )}
       </nav>
 
-      {/* MAIN – wider, minimal side margins, right column fills screen */}
-      <main className="mx-auto max-w-[1400px] px-4 py-8">
-        <section className="grid md:grid-cols-[minmax(560px,600px)_minmax(740px,1fr)] gap-12 items-start">
-          {/* LEFT: Big headline + HIW + CTA */}
+      {/* MAIN – even wider + tighter gutters */}
+      <main className="mx-auto max-w-[1600px] px-3">
+        {/* L/R layout with bigger left column and tighter gap */}
+        <section className="pt-10 pb-8 grid md:grid-cols-[minmax(660px,760px)_minmax(780px,1fr)] gap-10 items-start">
+          {/* LEFT: Headline + BIGGER HIW with tighter spacing */}
           <div>
-            <h1 className="text-[76px] leading-[0.95] font-extrabold tracking-tight">
+            <h1 className="text-[86px] leading-[0.93] font-extrabold tracking-tight">
               Find your Gida,<br />
               find your people.
             </h1>
 
-            <div className="mt-12">
+            <div className="mt-10">
               <h2 className="text-3xl font-extrabold">How it Works</h2>
-              <div className="mt-8 grid grid-cols-3 gap-10">
+              {/* bigger art, tighter gaps so it fills the left column nicely */}
+              <div className="mt-6 grid grid-cols-3 gap-5">
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSignup} alt="Sign Up" className="h-52 object-contain" />
-                  <p className="mt-3 text-base font-semibold">Sign Up</p>
+                  <img src={HIWSignup} alt="Sign Up" className="h-60 xl:h-64 object-contain" />
+                  <p className="mt-2 text-base font-semibold">Sign Up</p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSearch} alt="Search" className="h-52 object-contain" />
-                  <p className="mt-3 text-base font-semibold">
+                  <img src={HIWSearch} alt="Search" className="h-60 xl:h-64 object-contain" />
+                  <p className="mt-2 text-base font-semibold">
                     Search Rooms or<br />List Your Space
                   </p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWConnect} alt="Connect" className="h-52 object-contain" />
-                  <p className="mt-3 text-base font-semibold">
+                  <img src={HIWConnect} alt="Connect" className="h-60 xl:h-64 object-contain" />
+                  <p className="mt-2 text-base font-semibold">
                     Connect<br />with Roommates or Renters
                   </p>
                 </div>
               </div>
 
-              <div className="mt-10">
+              <div className="mt-8">
                 <Link
                   to="/roommate-matching"
-                  className="inline-block rounded-xl px-7 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
+                  className="inline-block rounded-xl px-8 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
                 >
                   Find a Roommate
                 </Link>
@@ -207,66 +209,68 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: Search pills + Popular grid */}
+          {/* RIGHT: (old) card-style searches + grid */}
           <div>
-            {/* First row of pills */}
-            <form onSubmit={submitPrimary} className="w-full">
-              <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_auto] gap-4">
+            {/* Primary search – classic card style */}
+            <form onSubmit={submitPrimary} className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
+              <div className="grid grid-cols-[1.3fr_1fr_1fr_auto] gap-3 items-center">
+                <label className="sr-only" htmlFor="city">City</label>
                 <input
+                  id="city"
                   type="text"
-                  placeholder="Location (e.g., Accra, Kumasi, East)"
+                  placeholder="Location (e.g., Accra, Kumasi, East Legon)"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
+                <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
                 <input
+                  id="min"
                   type="number"
                   inputMode="numeric"
                   min="0"
                   placeholder="Budget Min (GHS)"
                   value={min}
                   onChange={(e) => setMin(e.target.value)}
-                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
+                <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
                 <input
+                  id="max"
                   type="number"
                   inputMode="numeric"
                   min="0"
                   placeholder="Budget Max (GHS)"
                   value={max}
                   onChange={(e) => setMax(e.target.value)}
-                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <button
-                  type="submit"
-                  className="h-12 rounded-full bg-[#3B2719] text-white px-7 font-semibold hover:opacity-90 whitespace-nowrap"
-                >
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
                   Search
                 </button>
               </div>
             </form>
 
-            {/* Second row of pills */}
-            <form onSubmit={submitAI} className="mt-4">
-              <div className="grid grid-cols-[1fr_auto] gap-4">
+            {/* AI search – classic card style */}
+            <form onSubmit={submitAI} className="mt-3 bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+              <div className="flex gap-2">
+                <label className="sr-only" htmlFor="aiq">Search by description</label>
                 <input
+                  id="aiq"
                   type="text"
                   placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  className="h-12 rounded-full bg-white border border-black/10 px-5 outline-none focus:ring-2 focus:ring-black/10"
+                  className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
-                <button
-                  type="submit"
-                  className="h-12 rounded-full bg-[#3B2719] text-white px-7 font-semibold hover:opacity-90 whitespace-nowrap"
-                >
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
                   Search by Description
                 </button>
               </div>
             </form>
 
-            {/* Popular listings – fixed image height to avoid stretch, 3 columns */}
-            <section className="mt-10">
+            {/* Popular listings – fixed image height; 3 cols; tighter to fill column */}
+            <section className="mt-8">
               <h3 className="text-3xl font-extrabold">Popular Listings</h3>
               {err && <p className="mt-3 text-red-600">{err}</p>}
               {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
@@ -286,7 +290,6 @@ export default function Home() {
                       key={item.id}
                       className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
                     >
-                      {/* Fixed height keeps cards uniform and prevents stretching */}
                       <div className="relative h-48">
                         <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
                         {priceNum !== null && (
@@ -324,7 +327,7 @@ export default function Home() {
               <div className="mt-8 flex justify-center">
                 <Link
                   to="/listings"
-                  className="rounded-xl px-7 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
+                  className="rounded-xl px-8 py-3 bg-[#3B2719] text-white text-lg font-semibold hover:opacity-90"
                 >
                   View More
                 </Link>
@@ -336,7 +339,7 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="border-t border-black/10 py-8">
-        <div className="mx-auto max-w-[1400px] px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="mx-auto max-w-[1600px] px-3 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-6 w-6 object-contain" />
             <span className="font-bold">Gida</span>
