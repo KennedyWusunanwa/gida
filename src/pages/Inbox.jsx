@@ -2,7 +2,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { useDashboardUser } from "./DashboardLayout"; // uses your Outlet context
+import { useDashboardUser } from "../layouts/DashboardLayout";
+
 
 export default function Inbox() {
   const user = useDashboardUser(); // composable with your Dashboard shell
