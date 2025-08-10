@@ -1,8 +1,8 @@
+// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-// ASSETS
 import Logo from "../assets/logo.png";
 import HIWSignup from "../assets/hiw-signup.png";
 import HIWSearch from "../assets/hiw-search.png";
@@ -12,17 +12,16 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
-  const [city, setCity] = useState("");        // location
-  const [min, setMin] = useState("");          // GHS min
-  const [max, setMax] = useState("");          // GHS max
-  const [q, setQ] = useState("");              // natural language / keywords
+  const [city, setCity] = useState("");
+  const [min, setMin] = useState("");
+  const [max, setMax] = useState("");
+  const [q, setQ] = useState("");
 
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Inbox link (auth-aware)
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
@@ -39,26 +38,25 @@ export default function Home() {
     return () => sub?.unsubscribe();
   }, []);
 
-  // featured
+  // featured listings
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setErr(null);
       const { data, error } = await supabase.rpc("get_random_featured_listings", { count: 3 });
       if (error) setErr(error.message);
-      else setFeatured(data || []);
+      setFeatured(data || []);
       setLoading(false);
     };
     load();
   }, []);
 
-  // close mobile menu on resize up
   useEffect(() => {
     const onResize = () => { if (window.innerWidth >= 768) setMobileOpen(false); };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Main (city + budget) search
   const submitPrimary = (e) => {
     e.preventDefault();
     if (min !== "" && max !== "" && Number(min) > Number(max)) {
@@ -67,19 +65,20 @@ export default function Home() {
     }
     const params = new URLSearchParams();
     if (city.trim()) params.set("city", city.trim());
-    // IMPORTANT: allow "0" — only skip when empty string
     if (min !== "") params.set("min", String(Number(min)));
     if (max !== "") params.set("max", String(Number(max)));
     navigate(`/listings?${params.toString()}`);
   };
 
-  // AI-style / descriptive search
   const submitAI = (e) => {
     e.preventDefault();
     const query = q.trim();
     if (!query) return;
     navigate(`/listings?q=${encodeURIComponent(query)}`);
   };
+
+  const display = (v, fallback = "—") =>
+    v === null || v === undefined || v === "" ? fallback : v;
 
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
@@ -101,7 +100,10 @@ export default function Home() {
                 <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
                   View Dashboard
                 </Link>
-                <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} className="text-sm underline underline-offset-4 hover:opacity-70">
+                <button
+                  onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
+                  className="text-sm underline underline-offset-4 hover:opacity-70"
+                >
                   Logout
                 </button>
               </div>
@@ -114,7 +116,7 @@ export default function Home() {
 
           <button
             type="button"
-            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg黑/5 focus:outline-none focus:ring-2 focus:ring-black/20"
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
             aria-label="Open menu"
             aria-expanded={mobileOpen ? "true" : "false"}
             onClick={() => setMobileOpen((s) => !s)}
@@ -135,12 +137,17 @@ export default function Home() {
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
               <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
-              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg黑/5">Listings</Link>
-              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg黑/5">Messages</Link>
+              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
+              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
               {user ? (
                 <>
                   <Link to="/app/my-listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">View Dashboard</Link>
-                  <button onClick={async () => { setMobileOpen(false); await supabase.auth.signOut(); setUser(null); }} className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg黑/5">Logout</button>
+                  <button
+                    onClick={async () => { setMobileOpen(false); await supabase.auth.signOut(); setUser(null); }}
+                    className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg-black/5"
+                  >
+                    Logout
+                  </button>
                 </>
               ) : (
                 <Link to="/auth" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">Sign Up</Link>
@@ -159,11 +166,8 @@ export default function Home() {
             <span> find your people.</span>
           </h1>
 
-          {/* PRIMARY SEARCH: city + budget */}
-          <form
-            onSubmit={submitPrimary}
-            className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3"
-          >
+          {/* PRIMARY SEARCH */}
+          <form onSubmit={submitPrimary} className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
             <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
               <label className="sr-only" htmlFor="city">City</label>
               <input
@@ -196,20 +200,14 @@ export default function Home() {
                 onChange={(e) => setMax(e.target.value)}
                 className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
               />
-              <button
-                type="submit"
-                className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap"
-              >
+              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
                 Search
               </button>
             </div>
           </form>
 
-          {/* AI / NATURAL LANGUAGE SEARCH */}
-          <form
-            onSubmit={submitAI}
-            className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
-          >
+          {/* AI SEARCH */}
+          <form onSubmit={submitAI} className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="aiq">Search by description</label>
               <input
@@ -220,10 +218,7 @@ export default function Home() {
                 onChange={(e) => setQ(e.target.value)}
                 className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
               />
-              <button
-                type="submit"
-                className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap"
-              >
+              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
                 Search by Description
               </button>
             </div>
@@ -257,10 +252,13 @@ export default function Home() {
 
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {featured.map((item) => {
-              const img = item.image_url?.startsWith("http")
-                ? item.image_url
-                : item.image_url || "/images/placeholder.jpg";
-              const price = item.price ?? item.price_ghs;
+              const img =
+                item?.image_url?.startsWith?.("http")
+                  ? item.image_url
+                  : item?.image_url || "/images/placeholder.jpg";
+              const price = item?.price_ghs ?? item?.price;
+              const cityLoc = [item?.location, item?.city].filter(Boolean).join(", ");
+
               return (
                 <Link
                   to={`/listings/${item.id}`}
@@ -268,27 +266,29 @@ export default function Home() {
                   className="bg-white rounded-2xl overflow-hidden shadow hover:shadow-lg transition"
                 >
                   <div className="relative h-48">
-                    <img src={img} alt={item.title} className="w-full h-full object-cover" />
+                    <img src={img} alt={display(item?.title, "Listing")} className="w-full h-full object-cover" />
                     {price != null && (
                       <div className="absolute top-2 right-2 bg-[#3B2719] text-white text-sm px-3 py-1 rounded-full">
-                        GHC {Number(price).toLocaleString()}
+                        GH₵ {Number(price).toLocaleString()}
                       </div>
                     )}
                   </div>
-                  <div className="p-4 space-y-1">
-                    <h4 className="text-base font-bold truncate">{item.title}</h4>
-                    <div className="text-sm text黑/80 flex flex-col gap-0.5">
+                  <div className="p-4 space-y-2">
+                    <h4 className="text-base font-bold truncate">{display(item?.title, "Untitled listing")}</h4>
+                    <div className="text-sm text-black/80">{display(cityLoc)}</div>
+
+                    <div className="text-sm text-black/80 grid grid-cols-1 gap-1">
                       <div className="flex items-center gap-1">
                         <span>🛏</span>
-                        <span>{item.room_type}</span>
+                        <span>{display(item?.room_type)}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span>🏢</span>
-                        <span>{item.property_type}</span>
+                        <span>{display(item?.property_type)}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span>👤</span>
-                        <span>{item.gender}</span>
+                        <span>{display(item?.gender_pref, "Any gender")}</span>
                       </div>
                     </div>
                   </div>
