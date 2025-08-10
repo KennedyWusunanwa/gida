@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
-import { ensureUserHostConversation } from "../lib/createOrGetConversation";
+import { ensureConversationWith } from "../lib/ensureConversation";
 
 export default function ListingDetails() {
   const { id } = useParams();
@@ -142,50 +142,34 @@ export default function ListingDetails() {
 
   // Start messaging
   const onClickMessage = async () => {
-    if (!item?.id) {
-      alert("This listing is not available yet. Please refresh and try again.");
-      return;
+  if (!viewer) {
+    if (window.confirm("You must be logged in to message hosts. Go to login?")) {
+      navigate("/auth");
     }
-    if (!viewer) {
-      if (
-        window.confirm(
-          "You must be logged in to message hosts. Go to login?"
-        )
-      ) {
-        navigate("/auth");
-      }
-      return;
-    }
+    return;
+  }
+  const hostId = item?.user_id;
+  if (!hostId) {
+    alert("This listing has no host linked yet.");
+    return;
+  }
+  if (viewer.id === hostId) {
+    alert("You can’t message yourself about your own listing.");
+    return;
+  }
 
-    const hostId = item?.user_id;
-    if (!hostId) {
-      alert("This listing has no host linked yet.");
-      return;
-    }
-    if (viewer.id === hostId) {
-      alert("You can’t message yourself about your own listing.");
-      return;
-    }
+  try {
+    setMessaging(true);
+    const cid = await ensureConversationWith(hostId);
+    navigate(`/app/inbox?c=${encodeURIComponent(cid)}`);
+  } catch (e) {
+    console.error("Failed to start chat:", e);
+    alert("Could not start the chat. Please try again.");
+  } finally {
+    setMessaging(false);
+  }
+};
 
-    try {
-      setMessaging(true);
-      const convo = await ensureUserHostConversation(
-        item.id,
-        viewer.id,
-        hostId
-      );
-      const convoId =
-        (typeof convo === "string" && convo) ||
-        (convo && (convo.id || convo.conversation_id));
-      if (!convoId) throw new Error("No conversation id returned.");
-      navigate(`/app/inbox?c=${encodeURIComponent(convoId)}`);
-    } catch (e) {
-      console.error("Failed to start chat:", e);
-      alert("Could not start the chat. Please try again.");
-    } finally {
-      setMessaging(false);
-    }
-  };
 
   if (loading) return <div className="p-6">Loading…</div>;
   if (err) return <div className="p-6 text-red-600">{err}</div>;

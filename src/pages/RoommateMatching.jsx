@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
+import { ensureConversationWith } from "../lib/ensureConversation";
+
 
 export default function RoommateMatching() {
   const navigate = useNavigate();
@@ -111,20 +113,16 @@ export default function RoommateMatching() {
       .join("") || "G";
 
   // open (or create) a DM with target, then jump to that convo in Inbox
-  const startMessage = async (targetUserId) => {
-    try {
-      const { data, error } = await supabase.rpc("start_or_get_dm", {
-        p_user1: user.id,
-        p_user2: targetUserId,
-      });
-      if (error) throw error;
-      const convId = typeof data === "string" ? data : data?.id || data;
-      navigate(`/app/inbox?c=${encodeURIComponent(convId)}`);
-    } catch (_e) {
-      // fallback to old behavior if RPC missing
-      navigate(`/app/inbox?to=${encodeURIComponent(targetUserId)}`);
-    }
-  };
+ const startMessage = async (targetUserId) => {
+  try {
+    const cid = await ensureConversationWith(targetUserId);
+    navigate(`/app/inbox?c=${encodeURIComponent(cid)}`);
+  } catch (e) {
+    console.error("Failed to start conversation:", e);
+    alert("Couldn’t open chat. Please try again.");
+  }
+};
+
 
   const onChange = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
