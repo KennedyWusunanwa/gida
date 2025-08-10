@@ -93,7 +93,7 @@ export default function Home() {
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
       {/* NAV */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
-        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
+        <div className="mx-auto max-w-[1280px] px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
@@ -144,10 +144,10 @@ export default function Home() {
 
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
-            <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
-              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
-              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
+            <div className="px-6 py-3 space-y-1 bg-[#F7F0E6]">
+              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Roommate Matching</Link>
+              <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Listings</Link>
+              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg:black/5">Messages</Link>
               {user ? (
                 <>
                   <Link to="/app/my-listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">View Dashboard</Link>
@@ -167,12 +167,12 @@ export default function Home() {
       </nav>
 
       {/* MAIN */}
-      <main className="mx-auto max-w-6xl px-4 md:py-6">
-        {/* Desktop two-column hero like screenshot */}
-        <section className="md:grid md:grid-cols-[minmax(420px,520px)_1fr] md:gap-10 items-start">
+      <main className="mx-auto max-w-[1280px] px-6 md:py-6">
+        {/* Desktop two-column hero – wider grid to remove side emptiness */}
+        <section className="md:grid md:grid-cols-[minmax(560px,600px)_minmax(560px,1fr)] md:gap-12 items-start">
           {/* LEFT: big headline + HIW + CTA */}
           <div className="md:sticky md:top-20">
-            <h1 className="text-5xl md:text-[64px] leading-[0.95] font-extrabold tracking-tight">
+            <h1 className="text-[56px] leading-[0.95] md:text-[66px] font-extrabold tracking-tight">
               Find your Gida,<br />
               find your people.
             </h1>
@@ -211,7 +211,7 @@ export default function Home() {
           </div>
 
           {/* RIGHT: search boxes + popular listings */}
-          <div className="mt-10 md:mt-0">
+          <div className="mt-10 md:mt-1">
             {/* PRIMARY SEARCH */}
             <form onSubmit={submitPrimary} className="w-full bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
               <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
@@ -339,12 +339,12 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="border-t border-black/10 py-8">
-        <div className="mx-auto max-w-6xl px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="mx-auto max-w-[1280px] px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-6 w-6 object-contain" />
             <span className="font-bold">Gida</span>
           </div>
-        <p className="text-sm opacity-70">© {new Date().getFullYear()} Gida. All rights reserved.</p>
+          <p className="text-sm opacity-70">© {new Date().getFullYear()} Gida. All rights reserved.</p>
         </div>
       </footer>
     </div>
