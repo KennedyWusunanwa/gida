@@ -405,7 +405,9 @@ export default function RoommateMatching() {
     </Link>
 
     {/* Desktop nav */}
-   <nav className="flex items-center gap-6 md:gap-6 overflow-x-auto">
+
+      <nav className="hidden md:flex items-center gap-6">
+
       <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
       <Link to="/listings" className="hover:opacity-70">Listings</Link>
       <Link to={inboxHref} className="hover:opacity-70">Messages</Link>
