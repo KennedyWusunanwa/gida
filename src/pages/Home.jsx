@@ -1,4 +1,3 @@
-// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -25,31 +24,18 @@ export default function Home() {
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
-  // --- helpers ---
-  const display = (v, fallback = "—") =>
-    v === null || v === undefined || v === "" ? fallback : v;
+  const display = (v, f = "—") => (v === null || v === undefined || v === "" ? f : v);
 
-  // extract a numeric price from common fields (handles strings like "1,500")
   const extractPrice = (row) => {
-    const candidates = [
-      row?.price_ghs,
-      row?.price,              // some rows may still use this
-      row?.monthly_price,
-      row?.rent,
-      row?.amount,
-    ];
+    const candidates = [row?.price_ghs, row?.price, row?.monthly_price, row?.rent, row?.amount];
     for (const v of candidates) {
-      if (v === null || v === undefined) continue;
-      const n =
-        typeof v === "number"
-          ? v
-          : Number(String(v).replace(/[^\d.]/g, "")); // strip commas/labels
+      if (v == null) continue;
+      const n = typeof v === "number" ? v : Number(String(v).replace(/[^\d.]/g, ""));
       if (Number.isFinite(n) && n > 0) return Math.round(n);
     }
     return null;
   };
 
-  // auth
   useEffect(() => {
     let sub;
     (async () => {
@@ -62,12 +48,12 @@ export default function Home() {
     return () => sub?.unsubscribe();
   }, []);
 
-  // featured listings
+  // Pull 6 featured listings
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setErr(null);
-      const { data, error } = await supabase.rpc("get_random_featured_listings", { count: 3 });
+      const { data, error } = await supabase.rpc("get_random_featured_listings", { count: 6 });
       if (error) setErr(error.message);
       setFeatured(data || []);
       setLoading(false);
@@ -246,26 +232,26 @@ export default function Home() {
           </form>
         </section>
 
-        {/* HOW IT WORKS */}
+        {/* HOW IT WORKS (bigger images) */}
         <section className="py-10">
           <h2 className="text-2xl md:text-3xl font-extrabold text-center">How it Works</h2>
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="flex flex-col items-center text-center">
-              <img src={HIWSignup} alt="Sign Up" className="h-36 object-contain" />
+              <img src={HIWSignup} alt="Sign Up" className="h-44 md:h-52 object-contain" />
               <p className="mt-4 text-lg font-semibold">Sign Up</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <img src={HIWSearch} alt="Search" className="h-36 object-contain" />
+              <img src={HIWSearch} alt="Search" className="h-44 md:h-52 object-contain" />
               <p className="mt-4 text-lg font-semibold">Search Rooms or<br />List Your Space</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <img src={HIWConnect} alt="Connect" className="h-36 object-contain" />
+              <img src={HIWConnect} alt="Connect" className="h-44 md:h-52 object-contain" />
               <p className="mt-4 text-lg font-semibold">Connect<br />with Roommates or Renters</p>
             </div>
           </div>
         </section>
 
-        {/* POPULAR LISTINGS */}
+        {/* POPULAR LISTINGS (6 items + View More) */}
         <section className="py-6 pb-16">
           <h3 className="text-2xl md:text-3xl font-extrabold">Popular Listings</h3>
           {err && <p className="mt-3 text-red-600">{err}</p>}
@@ -318,6 +304,15 @@ export default function Home() {
                 </Link>
               );
             })}
+          </div>
+
+          <div className="mt-8 flex justify-center">
+            <Link
+              to="/listings"
+              className="rounded-xl px-6 py-3 bg-[#3B2719] text-white font-semibold hover:opacity-90"
+            >
+              View More
+            </Link>
           </div>
         </section>
       </main>
