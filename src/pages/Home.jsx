@@ -7,6 +7,7 @@ import Logo from "../assets/logo.png";
 import HIWSignup from "../assets/hiw-signup.png";
 import HIWSearch from "../assets/hiw-search.png";
 import HIWConnect from "../assets/hiw-connect.png";
+import Cloth from "../assets/cloth.png"; // <-- add this file
 
 export default function Home() {
   const navigate = useNavigate();
@@ -25,25 +26,14 @@ export default function Home() {
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
 
-  // --- helpers ---
   const display = (v, fallback = "—") =>
     v === null || v === undefined || v === "" ? fallback : v;
 
-  // extract a numeric price from common fields (handles strings like "1,500")
   const extractPrice = (row) => {
-    const candidates = [
-      row?.price_ghs,
-      row?.price,              // some rows may still use this
-      row?.monthly_price,
-      row?.rent,
-      row?.amount,
-    ];
+    const candidates = [row?.price_ghs, row?.price, row?.monthly_price, row?.rent, row?.amount];
     for (const v of candidates) {
-      if (v === null || v === undefined) continue;
-      const n =
-        typeof v === "number"
-          ? v
-          : Number(String(v).replace(/[^\d.]/g, "")); // strip commas/labels
+      if (v == null) continue;
+      const n = typeof v === "number" ? v : Number(String(v).replace(/[^\d.]/g, ""));
       if (Number.isFinite(n) && n > 0) return Math.round(n);
     }
     return null;
@@ -106,11 +96,12 @@ export default function Home() {
       {/* NAV */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
             <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
             <span className="font-extrabold text-xl tracking-tight">Gida</span>
           </Link>
 
+          {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
@@ -135,6 +126,7 @@ export default function Home() {
             )}
           </div>
 
+          {/* Mobile toggle */}
           <button
             type="button"
             className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
@@ -154,6 +146,7 @@ export default function Home() {
           </button>
         </div>
 
+        {/* Mobile panel */}
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
@@ -180,70 +173,108 @@ export default function Home() {
 
       {/* MAIN */}
       <main className="mx-auto max-w-6xl px-4">
-        {/* HERO */}
-        <section className="pt-12 pb-10">
-          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight text-center">
-            Find your Gida,<br className="hidden md:block" />
-            <span> find your people.</span>
-          </h1>
+        {/* HERO with cloth wedges */}
+        <section className="relative pt-12 pb-10 overflow-hidden">
+          {/* Left wedge (desktop only) */}
+          <div
+            aria-hidden
+            className="hidden md:block absolute inset-y-0 left-0 w-[38vw] max-w-[420px] z-0 pointer-events-none"
+          >
+            <div
+              className="absolute -left-10 top-0 h-[130%] w-[130%]"
+              style={{
+                backgroundImage: `url(${Cloth})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                clipPath: "polygon(0 0, 100% 0, 0 100%)",
+                filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.15))",
+              }}
+            />
+          </div>
 
-          {/* PRIMARY SEARCH */}
-          <form onSubmit={submitPrimary} className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
-            <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
-              <label className="sr-only" htmlFor="city">City</label>
-              <input
-                id="city"
-                type="text"
-                placeholder="Location (e.g., Accra, Kumasi, East Legon)"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
-              <input
-                id="min"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                placeholder="Budget Min (GHS)"
-                value={min}
-                onChange={(e) => setMin(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
-              <input
-                id="max"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                placeholder="Budget Max (GHS)"
-                value={max}
-                onChange={(e) => setMax(e.target.value)}
-                className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
-                Search
-              </button>
-            </div>
-          </form>
+          {/* Right wedge (desktop only) */}
+          <div
+            aria-hidden
+            className="hidden md:block absolute inset-y-0 right-0 w-[38vw] max-w-[420px] z-0 pointer-events-none"
+          >
+            <div
+              className="absolute -right-10 top-0 h-[130%] w-[130%]"
+              style={{
+                backgroundImage: `url(${Cloth})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+                transform: "scaleX(-1)", // mirror for symmetry
+                clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
+                filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.15))",
+              }}
+            />
+          </div>
 
-          {/* AI SEARCH */}
-          <form onSubmit={submitAI} className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-            <div className="flex gap-2">
-              <label className="sr-only" htmlFor="aiq">Search by description</label>
-              <input
-                id="aiq"
-                type="text"
-                placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
-              />
-              <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
-                Search by Description
-              </button>
-            </div>
-          </form>
+          {/* Hero content */}
+          <div className="relative z-10">
+            <h1 className="text-4xl md:text-6xl font-extrabold leading-tight tracking-tight text-center">
+              Find your Gida,<br className="hidden md:block" />
+              <span> find your people.</span>
+            </h1>
+
+            {/* PRIMARY SEARCH */}
+            <form onSubmit={submitPrimary} className="mt-8 mx-auto w-full md:w-[920px] bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1fr_auto] gap-3 items-center">
+                <label className="sr-only" htmlFor="city">City</label>
+                <input
+                  id="city"
+                  type="text"
+                  placeholder="Location (e.g., Accra, Kumasi, East Legon)"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
+                <input
+                  id="min"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  placeholder="Budget Min (GHS)"
+                  value={min}
+                  onChange={(e) => setMin(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
+                <input
+                  id="max"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  placeholder="Budget Max (GHS)"
+                  value={max}
+                  onChange={(e) => setMax(e.target.value)}
+                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                  Search
+                </button>
+              </div>
+            </form>
+
+            {/* AI SEARCH */}
+            <form onSubmit={submitAI} className="mt-3 mx-auto w-full md:w-[920px] bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+              <div className="flex gap-2">
+                <label className="sr-only" htmlFor="aiq">Search by description</label>
+                <input
+                  id="aiq"
+                  type="text"
+                  placeholder='Try: "Self-contained in East Legon under 1500 cedis, no smoking"'
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="flex-1 min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                />
+                <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
+                  Search by Description
+                </button>
+              </div>
+            </form>
+          </div>
         </section>
 
         {/* HOW IT WORKS */}
