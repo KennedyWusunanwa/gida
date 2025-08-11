@@ -22,7 +22,7 @@ export default function Inbox() {
   const [sending, setSending] = useState(false);
 
   const listRef = useRef(null);
-  const didAutoOpenRef = useRef(false); // only auto-open newest once
+  const didAutoOpenRef = useRef(false);
 
   const avatarFor = (name) =>
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
@@ -49,7 +49,6 @@ export default function Inbox() {
     setThreads(data);
     setLoadingThreads(false);
 
-    // auto-open newest exactly once
     if (!didAutoOpenRef.current && !activeId && data.length) {
       didAutoOpenRef.current = true;
       const next = new URLSearchParams(params);
@@ -60,7 +59,7 @@ export default function Inbox() {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
-  // Realtime: any new message → refresh threads
+  // Realtime: refresh threads
   useEffect(() => {
     const ch = supabase
       .channel("threads-global")
@@ -73,12 +72,11 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [fetchThreads]);
 
-  // Messages for active conversation
+  // Messages
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) { setMessages([]); return; }
     setLoadingMessages(true);
 
-    // ensure participant (avoid RLS confusion)
     const { data: member } = await supabase
       .from("conversation_participants")
       .select("conversation_id")
@@ -97,7 +95,6 @@ export default function Inbox() {
     setMessages(error ? [] : (data || []));
     setLoadingMessages(false);
 
-    // mark read
     await supabase
       .from("conversation_participants")
       .update({ last_read_at: new Date().toISOString() })
@@ -105,10 +102,9 @@ export default function Inbox() {
       .eq("user_id", user.id);
   }, [activeId, user?.id]);
 
-  // Fetch messages on mount/active change
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  // Also refresh when tab regains focus (fallback if WS sleeps on mobile)
+  // Focus fallback (iOS/Safari)
   useEffect(() => {
     const onFocus = () => {
       fetchThreads();
@@ -133,7 +129,7 @@ export default function Inbox() {
         (payload) => {
           const m = payload.new;
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-          fetchThreads(); // update preview/unread
+          fetchThreads();
           queueMicrotask(() => {
             if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
           });
@@ -143,7 +139,7 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [activeId, fetchThreads]);
 
-  // Stick to bottom on new messages
+  // Stick to bottom
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length, activeId]);
@@ -158,7 +154,6 @@ export default function Inbox() {
     const body = text.trim();
     if (!body || !activeId || !user?.id) return;
 
-    // optimistic
     setMessages((p) => [...p, {
       id: `tmp-${Date.now()}`,
       conversation_id: activeId,
@@ -184,7 +179,6 @@ export default function Inbox() {
     setParams(next);
   }
 
-  // Real “Back” on mobile (don’t auto-open again)
   function backToList() {
     didAutoOpenRef.current = true;
     const next = new URLSearchParams(params);
@@ -197,16 +191,19 @@ export default function Inbox() {
   return (
     <div className="w-full max-w-5xl mx-auto">
       <div className="rounded-2xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.06)] bg-white">
-        <div className="h-[64vh] md:h-[70vh] grid grid-cols-1 md:grid-cols-[280px_1fr]">
+        {/* IMPORTANT: min-h-0 so inner columns can scroll */}
+        <div className="h-[64vh] md:h-[70vh] min-h-0 grid grid-cols-1 md:grid-cols-[280px_1fr]">
           {/* Sidebar */}
-          <aside className={`border-r border-black/10 flex flex-col ${activeId ? "hidden md:flex" : "flex"}`}>
-            <div className="px-4 py-3 font-extrabold text-lg border-b sticky top-0 bg-white z-10">Messages</div>
+          <aside className={`border-r border-black/10 flex flex-col min-h-0 ${activeId ? "hidden md:flex" : "flex"}`}>
+            <div className="px-4 py-3 font-extrabold text-lg border-b sticky top-0 bg-white z-10 shrink-0">
+              Messages
+            </div>
             {loadingThreads ? (
               <div className="p-4 text-black/60">Loading chats…</div>
             ) : threads.length === 0 ? (
               <div className="p-4 text-black/60">No conversations yet</div>
             ) : (
-              <ul className="flex-1 overflow-y-auto">
+              <ul className="flex-1 overflow-y-auto overscroll-contain">
                 {threads.map((t) => {
                   const isActive = activeId === t.conversation_id;
                   const name = t.other_full_name || "User";
@@ -224,7 +221,7 @@ export default function Inbox() {
                               <span className="shrink-0 bg-[#5B3A1E] text-white text-[10px] px-2 py-0.5 rounded-full">New</span>
                             )}
                           </div>
-                          <div className="text-xs text_black/60 truncate">{t.last_message_preview || ""}</div>
+                          <div className="text-xs text-black/60 truncate">{t.last_message_preview || ""}</div>
                         </div>
                       </button>
                     </li>
@@ -235,10 +232,11 @@ export default function Inbox() {
           </aside>
 
           {/* Chat */}
-          <section className="flex flex-col" style={{ backgroundColor: CHAT_BG }}>
+          <section className="flex flex-col min-h-0" style={{ backgroundColor: CHAT_BG }}>
             {activeId ? (
               <>
-                <div className="px-3 sm:px-4 py-3 border-b border-black/10 flex items-center gap-3 sticky top-0 bg-white/90 backdrop-blur z-10">
+                {/* Header should not shrink; keep visible */}
+                <div className="px-3 sm:px-4 py-3 border-b border-black/10 flex items-center gap-3 sticky top-0 bg-white/90 backdrop-blur z-10 shrink-0">
                   <button onClick={backToList} className="md:hidden rounded-lg px-2 py-1 border border-black/10">Back</button>
                   <img
                     src={activeThread?.other_avatar_url || avatarFor(activeThread?.other_full_name)}
@@ -248,7 +246,11 @@ export default function Inbox() {
                   <div className="font-semibold truncate">{activeThread?.other_full_name || "Conversation"}</div>
                 </div>
 
-                <div ref={listRef} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2">
+                {/* Messages list fills available space and scrolls */}
+                <div
+                  ref={listRef}
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-2"
+                >
                   {loadingMessages ? (
                     <div className="text-black/60">Loading messages…</div>
                   ) : messages.length === 0 ? (
@@ -271,7 +273,11 @@ export default function Inbox() {
                   )}
                 </div>
 
-                <form onSubmit={sendMessage} className="p-2 sm:p-3 border-t border-black/10 flex gap-2 bg-white">
+                {/* Composer pinned at bottom; never shrinks */}
+                <form
+                  onSubmit={sendMessage}
+                  className="p-2 sm:p-3 border-t border-black/10 flex gap-2 bg-white shrink-0 pb-[env(safe-area-inset-bottom)]"
+                >
                   <input
                     value={text}
                     onChange={(e) => setText(e.target.value)}
@@ -279,13 +285,17 @@ export default function Inbox() {
                     className="flex-1 rounded-xl border border-black/10 px-3 sm:px-4 py-2"
                     disabled={!user || sending}
                   />
-                  <button type="submit" className="rounded-xl bg-[#5B3A1E] text-white px-4 py-2 font-semibold disabled:opacity-60" disabled={!text.trim() || sending}>
+                  <button
+                    type="submit"
+                    className="rounded-xl bg-[#5B3A1E] text-white px-4 py-2 font-semibold disabled:opacity-60"
+                    disabled={!text.trim() || sending}
+                  >
                     Send
                   </button>
                 </form>
               </>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-black/60 p-6">Select a chat to start</div>
+              <div className="flex-1 min-h-0 flex items-center justify-center text-black/60 p-6">Select a chat to start</div>
             )}
           </section>
         </div>
