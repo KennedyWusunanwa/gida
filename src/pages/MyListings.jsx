@@ -1,20 +1,52 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useDashboardUser } from "../layouts/DashboardLayout";
 
+/** Regions → Cities (same canonical list used in Listings/AddListing) */
+const GH_LOCATIONS = {
+  "Greater Accra": [
+    "Accra","East Legon","West Legon","North Legon","Airport Residential",
+    "Cantonments","Labone","Osu","Dzorwulu","Roman Ridge","Abelemkpe",
+    "Ridge","Spintex","Teshie","Nungua","Sakumono","Lashibi","Tema",
+    "Tema Community 1","Tema Community 2","Tema Community 3","Tema Community 4",
+    "Tema Community 5","Tema Community 6","Tema Community 7","Tema Community 8",
+    "Tema Community 9","Tema Community 10","Tema Community 11","Tema Community 12",
+    "Tema Community 13","Tema Community 14","Tema Community 15","Tema Community 16",
+    "Tema Community 17","Tema Community 18","Tema Community 19","Tema Community 20",
+    "Tema Community 25","Ashaiman","Adenta","Madina","Ashaley Botwe","Trassaco",
+    "Oyibi","Oyarifa","Pokuase","Amasaman","Achimota","Haatso","Agbogba",
+    "Kwabenya","Dansoman","Kasoa (GA boundary)","Weija","Sowutuom","Darkuman",
+    "Mallam","Gbawe","McCarthy Hill","Tuba","Bortianor","Kokrobite"
+  ],
+  "Ashanti": ["Kumasi","Asokwa","Tafo","Suame","Ejisu","Obuasi","Tanoso","Atonsu","Kwadaso","Nyhiaeso","Santasi","Bantama","Bekwai","Mampong"],
+  "Western": ["Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia","Shama"],
+  "Central": ["Cape Coast","Kasoa","Elmina","Mankessim","Winneba","Agona Swedru"],
+  "Eastern": ["Koforidua","Nsawam","Akosombo","Aburi","Akim Oda","Nkawkaw"],
+  "Northern": ["Tamale","Savelugu","Walewale","Yendi"],
+  "Volta": ["Ho","Hohoe","Sogakope","Keta","Aflao"],
+  "Upper East": ["Bolgatanga","Navrongo","Bawku"],
+  "Upper West": ["Wa","Lawra","Tumu"],
+  "Bono": ["Sunyani","Berekum","Dormaa Ahenkro"],
+  "Bono East": ["Techiman","Kintampo","Atebubu"],
+  "Ahafo": ["Goaso","Bechem"],
+  "Western North": ["Sefwi Wiawso","Bibiani","Juaboso"],
+  "Oti": ["Dambai","Jasikan","Nkwanta"],
+  "Savannah": ["Damongo","Bole","Salaga"],
+  "North East": ["Nalerigu","Gambaga"],
+};
+
 const AMENITIES = [
-  "Wi-Fi",
-  "AC",
-  "Washer",
-  "Parking",
-  "Kitchen",
-  "Wardrobe",
-  "Security",
-  "Good road",
-  "Ghana Water",
-  "Running water",
-  "Borehole",
+  "Wi-Fi","AC","Washer","Parking","Kitchen","Wardrobe","Security",
+  "Good road","Ghana Water","Running water","Borehole",
 ];
+
+function regionForCity(city) {
+  if (!city) return "";
+  for (const [reg, cities] of Object.entries(GH_LOCATIONS)) {
+    if (cities.includes(city)) return reg;
+  }
+  return ""; // unknown/legacy value
+}
 
 export default function MyListings() {
   const user = useDashboardUser();
@@ -26,10 +58,10 @@ export default function MyListings() {
   const [selected, setSelected] = useState([]);
   const allSelected = listings.length > 0 && selected.length === listings.length;
 
-  // inline edit state (now includes bedrooms & amenities)
+  // inline edit state (aligned with AddListing: region+city, bedrooms, amenities)
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
-    title: "", location: "", city: "", price: "", description: "",
+    title: "", location: "", region: "", city: "", price: "", description: "",
     bedrooms: "", amenities: [],
   });
   const [saving, setSaving] = useState(false);
@@ -98,32 +130,49 @@ export default function MyListings() {
   };
 
   const startEdit = (item) => {
+    const reg = regionForCity(item.city);
     setEditingId(item.id);
     setForm({
       title: item.title || "",
       location: item.location || "",
+      region: reg,
       city: item.city || "",
       price: item.price ?? "",
       description: item.description || "",
-      bedrooms: item.bedrooms ?? "",
+      bedrooms: item.bedrooms == null ? "" : (item.bedrooms >= 5 ? "5+" : String(item.bedrooms)),
       amenities: Array.isArray(item.amenities) ? item.amenities : [],
     });
   };
   const cancelEdit = () => {
     setEditingId(null);
-    setForm({ title: "", location: "", city: "", price: "", description: "", bedrooms: "", amenities: [] });
+    setForm({ title: "", location: "", region: "", city: "", price: "", description: "", bedrooms: "", amenities: [] });
   };
   const toggleAmenity = (name) =>
-    setForm((f) => ({ ...f, amenities: f.amenities.includes(name) ? f.amenities.filter((x) => x !== name) : [...f.amenities, name] }));
+    setForm((f) => ({
+      ...f,
+      amenities: f.amenities.includes(name) ? f.amenities.filter((x) => x !== name) : [...f.amenities, name],
+    }));
+
+  // cities list for chosen region (or all if none picked)
+  const cityOptions = useMemo(
+    () => (form.region ? GH_LOCATIONS[form.region] || [] : Object.values(GH_LOCATIONS).flat()),
+    [form.region]
+  );
 
   const saveEdit = async (e) => {
     e?.preventDefault();
     if (!editingId) return;
+
+    if (!form.title || !form.city || !form.location || !form.price || !form.description) {
+      setMsg("Title, city, location, price, and description are required.");
+      return;
+    }
+
     setSaving(true);
     const payload = {
       title: form.title,
       location: form.location,
-      city: form.city,
+      city: form.city, // store canonical city only (region is UX)
       price: Number(form.price) || 0,
       description: form.description,
       bedrooms: form.bedrooms === "" ? null : (form.bedrooms === "5+" ? 5 : Number(form.bedrooms)),
@@ -162,6 +211,8 @@ export default function MyListings() {
         <div className="grid">
           {listings.map((it) => {
             const isEditing = editingId === it.id;
+            const priceBadge = it.price != null ? `GH₵${Number(it.price).toLocaleString("en-GH")}/mo` : "—";
+
             return (
               <article key={it.id} className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -196,10 +247,10 @@ export default function MyListings() {
                   <>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ fontWeight: 800 }}>{it.title}</div>
-                      <div style={{ fontWeight: 800 }}>GH₵{Number(it.price).toLocaleString()}/mo</div>
+                      <div style={{ fontWeight: 800 }}>{priceBadge}</div>
                     </div>
                     <div style={{ color: "#6b7280", marginTop: 4 }}>
-                      {it.location}, {it.city}{it.bedrooms ? ` • ${it.bedrooms} BR` : ""}
+                      {it.location}{it.city ? `, ${it.city}` : ""}{it.bedrooms ? ` • ${it.bedrooms} BR` : ""}
                     </div>
                     {Array.isArray(it.amenities) && it.amenities.length > 0 && (
                       <div style={{ color: "#374151", marginTop: 6, fontSize: 14 }}>
@@ -212,18 +263,67 @@ export default function MyListings() {
                   </>
                 ) : (
                   <form onSubmit={saveEdit} style={{ display: "grid", gap: 8 }}>
-                    <input className="input" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                    <input
+                      className="input"
+                      value={form.title}
+                      onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="Title *"
+                      required
+                    />
+
+                    {/* Region + City (store only City) */}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <input className="input" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="Location" />
-                      <input className="input" value={form.city} onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))} placeholder="City" />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <input className="input" type="number" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="Price (GHS)" />
-                      <select className="input" value={form.bedrooms} onChange={(e) => setForm((f) => ({ ...f, bedrooms: e.target.value }))}>
-                        <option value="">Bedrooms</option>
-                        <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>5+</option>
+                      <select
+                        className="input"
+                        value={form.region}
+                        onChange={(e) => setForm((f) => ({ ...f, region: e.target.value, city: "" }))}
+                      >
+                        <option value="">Region</option>
+                        {Object.keys(GH_LOCATIONS).map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                      <select
+                        className="input"
+                        value={form.city}
+                        onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                        required
+                      >
+                        <option value="">City/Town *</option>
+                        {cityOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <input
+                        className="input"
+                        value={form.location}
+                        onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                        placeholder="Neighborhood / Landmark *"
+                        required
+                      />
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        value={form.price}
+                        onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                        placeholder="Price (GHS) *"
+                        required
+                      />
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <select
+                        className="input"
+                        value={form.bedrooms}
+                        onChange={(e) => setForm((f) => ({ ...f, bedrooms: e.target.value }))}
+                      >
+                        <option value="">Bedrooms</option>
+                        <option>1</option><option>2</option><option>3</option>
+                        <option>4</option><option>5</option><option>5+</option>
+                      </select>
+                      <div /> {/* spacer */}
+                    </div>
+
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       {AMENITIES.map((a) => (
                         <label key={a} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
@@ -232,7 +332,15 @@ export default function MyListings() {
                         </label>
                       ))}
                     </div>
-                    <textarea className="textarea" rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Description" />
+
+                    <textarea
+                      className="textarea"
+                      rows={3}
+                      value={form.description}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder="e.g., Spacious 2-bedroom in East Legon with borehole water, tiled floors, fitted kitchen, gated compound. 5 mins from American House. 1 year advance. *"
+                      required
+                    />
                   </form>
                 )}
               </article>
