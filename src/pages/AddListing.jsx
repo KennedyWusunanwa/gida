@@ -2,6 +2,22 @@ import React, { useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import { useDashboardUser } from "../layouts/DashboardLayout";
 
+// Bedrooms & Ghana-focused amenities
+const BEDROOM_CHOICES = ["1", "2", "3", "4", "5", "5+"];
+const AMENITIES = [
+  "Wi-Fi",
+  "AC",
+  "Washer",
+  "Parking",
+  "Kitchen",
+  "Wardrobe",
+  "Security",
+  "Good road",
+  "Ghana Water",
+  "Running water",
+  "Borehole",
+];
+
 export default function AddListing() {
   const user = useDashboardUser();
 
@@ -12,8 +28,11 @@ export default function AddListing() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  // New UI fields (now persisted)
+  // New persisted fields
   const [roomType, setRoomType] = useState("Single Room");
+  const [bedrooms, setBedrooms] = useState("");
+  const [amenities, setAmenities] = useState([]);
+  // (keeping older roommate prefs if you still want them)
   const [gender, setGender] = useState("Any");
   const [lifestyle, setLifestyle] = useState("Any");
   const [pets, setPets] = useState("No preference");
@@ -34,14 +53,15 @@ export default function AddListing() {
     setFiles(next);
     setPreviews(next.map((f) => URL.createObjectURL(f)));
   };
-
   const removeImageAt = (idx) => {
     const next = files.filter((_, i) => i !== idx);
     setFiles(next);
     setPreviews(next.map((f) => URL.createObjectURL(f)));
   };
-
   const triggerPick = () => fileInputRef.current?.click();
+
+  const toggleAmenity = (name) =>
+    setAmenities((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
 
   const uploadImagesAndGetUrls = async () => {
     if (!files.length) return [];
@@ -72,12 +92,15 @@ export default function AddListing() {
     try {
       setAdding(true);
 
-      // 1) Upload images
+      // Upload images
       const urls = await uploadImagesAndGetUrls();
       const mainUrl = urls[0] || null;
       const extraUrls = urls.slice(1);
 
-      // 2) Insert listing (PERSIST NEW FIELDS)
+      // Bedrooms numeric value (store 5 for "5+")
+      const bedroomsValue = bedrooms === "5+" ? 5 : bedrooms ? Number(bedrooms) : null;
+
+      // Insert listing
       const { data: listing, error: listingErr } = await supabase
         .from("listings")
         .insert([
@@ -91,8 +114,11 @@ export default function AddListing() {
             image_url: mainUrl,
             is_published: true,
 
-            // NEW persisted fields
             room_type: roomType,
+            bedrooms: bedroomsValue,
+            amenities: amenities.length ? amenities : null,
+
+            // optional older prefs (kept for compatibility)
             gender_pref: gender,
             lifestyle_pref: lifestyle,
             pets_pref: pets,
@@ -103,7 +129,7 @@ export default function AddListing() {
 
       if (listingErr) throw listingErr;
 
-      // 3) Extra images
+      // Extra images
       if (extraUrls.length) {
         const rows = extraUrls.map((url) => ({ listing_id: listing.id, url }));
         const { error: imgErr } = await supabase.from("listing_images").insert(rows);
@@ -118,6 +144,8 @@ export default function AddListing() {
       setPrice("");
       setDescription("");
       setRoomType("Single Room");
+      setBedrooms("");
+      setAmenities([]);
       setGender("Any");
       setLifestyle("Any");
       setPets("No preference");
@@ -132,79 +160,52 @@ export default function AddListing() {
     }
   };
 
-  // ---- UI ----
   return (
     <div className="min-h-screen bg-[#F7F2E9] py-6 px-4">
       <div className="mx-auto max-w-4xl rounded-2xl bg-[#FBF3E6] shadow-xl p-6 sm:p-10">
-        {/* Title */}
         <div className="mb-6 text-center">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-[#5B3A1E]">
-            Create Listing
-          </h1>
-        </div>
-
-        {/* Section label */}
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-[#2B2B2B]">Room Information</h2>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-[#5B3A1E]">Create Listing</h1>
         </div>
 
         {msg && (
-          <div
-            className={`mb-6 rounded-lg px-4 py-3 text-sm ${
-              /^Error:|error/i.test(msg)
-                ? "bg-red-50 text-red-700"
-                : "bg-emerald-50 text-emerald-700"
-            }`}
-          >
+          <div className={`mb-6 rounded-lg px-4 py-3 text-sm ${/^Error:|error/i.test(msg) ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
             {msg}
           </div>
         )}
 
         <form onSubmit={submit} className="space-y-7">
-          {/* 1) Title */}
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-              Title
-            </label>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Title</label>
             <input
               className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              placeholder="Short title (e.g., Cozy 1BR)"
+              placeholder="Short title (e.g., Cozy 2BR at East Legon)"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
           </div>
 
-          {/* 2) Location */}
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-              Location
-            </label>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Location</label>
             <input
               className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              placeholder="Enter location"
+              placeholder="Area or neighborhood"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
             />
           </div>
 
-          {/* 3) City + 4) Price */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-                City
-              </label>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">City</label>
               <input
                 className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                placeholder="Enter city (e.g., Accra)"
+                placeholder="e.g., Accra"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
               />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-                Price
-              </label>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Price (GHS)</label>
               <input
                 type="number"
                 className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
@@ -215,146 +216,100 @@ export default function AddListing() {
             </div>
           </div>
 
-          {/* 5) Room Type */}
-          <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-              Room Type
-            </label>
-            <select
-              className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              value={roomType}
-              onChange={(e) => setRoomType(e.target.value)}
-            >
-              <option>Single Room</option>
-              <option>Self-Contained</option>
-              <option>1 Bedroom</option>
-              <option>2 Bedroom</option>
-              <option>Shared Room</option>
-            </select>
+          {/* Type + Bedrooms */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Room Type</label>
+              <select
+                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
+                value={roomType}
+                onChange={(e) => setRoomType(e.target.value)}
+              >
+                <option>Single Room</option>
+                <option>Self-Contained</option>
+                <option>1 Bedroom</option>
+                <option>2 Bedroom</option>
+                <option>3 Bedroom</option>
+                <option>Shared Room</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Bedrooms</label>
+              <select
+                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
+                value={bedrooms}
+                onChange={(e) => setBedrooms(e.target.value)}
+              >
+                <option value="">Select</option>
+                {BEDROOM_CHOICES.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
           </div>
 
-          {/* 6) Upload Photos */}
+          {/* Amenities */}
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-              Upload Photos
-            </label>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Amenities</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {AMENITIES.map((a) => (
+                <label key={a} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={amenities.includes(a)} onChange={() => toggleAmenity(a)} />
+                  <span>{a}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={onFilesChange}
-            />
-
+          {/* Photos */}
+          <div>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Upload Photos</label>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFilesChange} />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {previews.map((src, i) => (
-                <div
-                  key={i}
-                  className="relative h-28 rounded-xl border-2 border-dashed border-[#E7E1D8] bg-white overflow-hidden flex items-center justify-center"
-                >
-                  <img
-                    src={src}
-                    alt={`Preview ${i + 1}`}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImageAt(i)}
-                    className="absolute top-1.5 right-1.5 rounded-full bg-white/90 text-xs px-2 py-0.5 shadow"
-                    title="Remove"
-                  >
-                    ✕
-                  </button>
+                <div key={i} className="relative h-28 rounded-xl border-2 border-dashed border-[#E7E1D8] bg-white overflow-hidden flex items-center justify-center">
+                  <img src={src} alt={`Preview ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+                  <button type="button" onClick={() => removeImageAt(i)} className="absolute top-1.5 right-1.5 rounded-full bg-white/90 text-xs px-2 py-0.5 shadow" title="Remove">✕</button>
                 </div>
               ))}
-
-              <button
-                type="button"
-                onClick={triggerPick}
-                className="h-28 rounded-xl border-2 border-dashed border-[#E7E1D8] bg-[#F7F2E9] hover:bg-[#f1e8d9] flex items-center justify-center"
-                title="Add photos"
-              >
+              <button type="button" onClick={triggerPick} className="h-28 rounded-xl border-2 border-dashed border-[#E7E1D8] bg-[#F7F2E9] hover:bg-[#f1e8d9] flex items-center justify-center" title="Add photos">
                 <span className="text-2xl text-[#8B5E34]">+</span>
               </button>
             </div>
-
-            <p className="mt-2 text-xs text-gray-500">
-              First photo becomes the main image. JPEG/PNG, &lt; 5MB each.
-            </p>
+            <p className="mt-2 text-xs text-gray-500">First photo becomes the main image. JPEG/PNG, &lt; 5MB each.</p>
           </div>
 
-          {/* 7) Roommate Preferences */}
+          {/* Optional roommate prefs (kept for now) */}
           <div>
-            <h3 className="text-lg font-semibold text-[#2B2B2B] mb-4">
-              Roommate Preferences
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold text-[#2B2B2B] mb-4">Roommate Preferences (optional)</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Gender</label>
-                <select
-                  className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value)}
-                >
-                  <option>Any</option>
-                  <option>Male</option>
-                  <option>Female</option>
-                  <option>Other</option>
+                <select className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3" value={gender} onChange={(e) => setGender(e.target.value)}>
+                  <option>Any</option><option>Male</option><option>Female</option><option>Other</option>
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Lifestyle</label>
-                <select
-                  className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                  value={lifestyle}
-                  onChange={(e) => setLifestyle(e.target.value)}
-                >
-                  <option>Any</option>
-                  <option>Quiet</option>
-                  <option>Social</option>
-                  <option>Early riser</option>
-                  <option>Night owl</option>
+                <select className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3" value={lifestyle} onChange={(e) => setLifestyle(e.target.value)}>
+                  <option>Any</option><option>Quiet</option><option>Social</option><option>Early riser</option><option>Night owl</option>
                 </select>
               </div>
-
-              <div className="sm:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Pets</label>
-                <select
-                  className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                  value={pets}
-                  onChange={(e) => setPets(e.target.value)}
-                >
-                  <option>No preference</option>
-                  <option>No pets allowed</option>
-                  <option>Pets allowed</option>
+                <select className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3" value={pets} onChange={(e) => setPets(e.target.value)}>
+                  <option>No preference</option><option>No pets allowed</option><option>Pets allowed</option>
                 </select>
               </div>
             </div>
           </div>
 
-          {/* 8) Description */}
+          {/* Description + Publish */}
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">
-              Description
-            </label>
-            <textarea
-              rows={4}
-              className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              placeholder="Describe the place…"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Description</label>
+            <textarea rows={4} className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]" placeholder="Describe the place…" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          {/* Publish */}
           <div className="pt-1">
-            <button
-              className="w-full rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95 disabled:opacity-60"
-              disabled={adding}
-            >
+            <button className="w-full rounded-xl bg-[#5B3A1E] text-white py-3 font-semibold hover:opacity-95 disabled:opacity-60" disabled={adding}>
               {adding ? "Publishing…" : "Publish"}
             </button>
           </div>

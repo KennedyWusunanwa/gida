@@ -3,72 +3,133 @@ import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
 
-const PRICE_BUCKETS = [
+// Ghana regions → major cities (representative list)
+const GH_LOCATIONS = {
+  "Greater Accra": ["Accra", "Tema", "Madina", "Adenta", "Teshie", "Nungua", "Spintex", "Dansoman"],
+  "Ashanti": ["Kumasi", "Ejisu", "Obuasi", "Tafo", "Asokwa"],
+  "Western": ["Sekondi-Takoradi", "Tarkwa"],
+  "Central": ["Cape Coast", "Kasoa", "Elmina", "Mankessim"],
+  "Eastern": ["Koforidua", "Nsawam", "Akosombo"],
+  "Northern": ["Tamale", "Savelugu"],
+  "Volta": ["Ho", "Hohoe", "Sogakope"],
+  "Upper East": ["Bolgatanga", "Navrongo"],
+  "Upper West": ["Wa"],
+  "Bono": ["Sunyani", "Berekum"],
+  "Bono East": ["Techiman", "Kintampo"],
+  "Ahafo": ["Goaso"],
+  "Western North": ["Sefwi Wiawso", "Bibiani"],
+  "Oti": ["Dambai", "Jasikan"],
+  "Savannah": ["Damongo"],
+  "North East": ["Nalerigu"],
+};
+
+const BEDROOMS = [
   { label: "Any", value: "" },
-  { label: "≤ 600", value: "0-600" },
-  { label: "600 – 1,000", value: "600-1000" },
-  { label: "1,000 – 1,500", value: "1000-1500" },
-  { label: "≥ 1,500", value: "1500-" },
+  { label: "1", value: "1" },
+  { label: "2", value: "2" },
+  { label: "3", value: "3" },
+  { label: "4", value: "4" },
+  { label: "5", value: "5" },
+  { label: "5+", value: "5plus" },
 ];
 
-const AMENITIES = ["Wi-Fi", "AC", "Washer", "Parking", "Kitchen"];
+// Ghana-leaning amenity set
+const AMENITIES = [
+  "Wi-Fi",
+  "AC",
+  "Washer",
+  "Parking",
+  "Kitchen",
+  "Wardrobe",
+  "Security",
+  "Good road",
+  "Ghana Water",
+  "Running water",
+  "Borehole",
+];
 
 export default function Listings() {
   const [params, setParams] = useSearchParams();
 
-  // Read initial state from URL (unchanged)
-  const [search, setSearch]   = useState(params.get("q") || "");
-  const [city, setCity]       = useState(params.get("city") || "");
-  const [price, setPrice]     = useState(params.get("price") || "");
-  const [amenity, setAmenity] = useState(params.get("amenity") || "");
-  const [gender, setGender]   = useState(params.get("gender") || "");
-  const [min, setMin]         = useState(params.get("min") || "");
-  const [max, setMax]         = useState(params.get("max") || "");
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // Unread badge for header
+  const [user, setUser] = useState(null);
+  const [unread, setUnread] = useState(0);
 
+  // Filters/state (URL-synced)
+  const [search, setSearch] = useState(params.get("q") || "");
+  const [region, setRegion] = useState(params.get("region") || "");
+  const [city, setCity] = useState(params.get("city") || "");
+  const [beds, setBeds] = useState(params.get("beds") || "");
+  const [amenity, setAmenity] = useState(params.get("amenity") || "");
+  const [min, setMin] = useState(params.get("min") || "");
+  const [max, setMax] = useState(params.get("max") || "");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const [data, setData] = useState([]);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Auth + unread badge
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data?.user || null;
+      setUser(u);
+      if (u?.id) refreshUnread(u.id);
+    })();
+  }, []);
+  useEffect(() => {
+    if (!user?.id) return;
+    const ch = supabase
+      .channel(`listings-unread:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        () => refreshUnread(user.id)
+      )
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [user?.id]);
+  async function refreshUnread(uid) {
+    const { data, error } = await supabase
+      .from("inbox_threads")
+      .select("has_unread")
+      .eq("me_id", uid);
+    if (!error) setUnread((data || []).filter((t) => t.has_unread).length);
+  }
+
   // Keep state in sync on back/forward
   useEffect(() => {
     setSearch(params.get("q") || "");
+    setRegion(params.get("region") || "");
     setCity(params.get("city") || "");
-    setPrice(params.get("price") || "");
+    setBeds(params.get("beds") || "");
     setAmenity(params.get("amenity") || "");
-    setGender(params.get("gender") || "");
     setMin(params.get("min") || "");
     setMax(params.get("max") || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
 
-  // Apply filters to URL — respect "0"
+  // Write filters to URL
   const applyFiltersToURL = () => {
     const next = new URLSearchParams();
     if (search) next.set("q", search.trim());
+    if (region) next.set("region", region);
     if (city) next.set("city", city.trim());
-    if (price) next.set("price", price);
+    if (beds) next.set("beds", beds);
     if (amenity) next.set("amenity", amenity);
-    if (gender) next.set("gender", gender);
-    if (min !== "") next.set("min", String(min).trim()); // allow "0"
-    if (max !== "") next.set("max", String(max).trim()); // allow "0"
+    if (min !== "") next.set("min", String(min).trim());
+    if (max !== "") next.set("max", String(max).trim());
     setParams(next, { replace: true });
   };
-
-  const onSearch = (e) => {
-    e?.preventDefault?.();
-    applyFiltersToURL();
-  };
-
-  // Debounce for typing fields
+  const onSearch = (e) => { e?.preventDefault?.(); applyFiltersToURL(); };
   useEffect(() => {
     const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, city, price, amenity, gender, min, max]);
+  }, [search, region, city, beds, amenity, min, max]);
 
-  // Fetch when URL changes — min/max override bucket & allow zero
+  // Fetch when URL changes
   useEffect(() => {
     const fetchListings = async () => {
       setLoading(true);
@@ -77,7 +138,7 @@ export default function Listings() {
       let query = supabase
         .from("listings")
         .select(
-          "id, title, description, city, location, price, price_ghs, image_url, property_type, room_type, gender_pref, amenities, is_published, created_at"
+          "id, title, description, city, location, price, price_ghs, image_url, property_type, room_type, amenities, bedrooms, is_published, created_at"
         )
         .eq("is_published", true)
         .order("created_at", { ascending: false });
@@ -91,38 +152,28 @@ export default function Listings() {
         );
       }
 
-      // City
+      // City filter (region is UI-only unless you have a column)
       const cityParam = params.get("city");
       if (cityParam) query = query.ilike("city", `%${cityParam}%`);
 
-      // Explicit min/max (must honor "0")
+      // Price min/max (0 allowed)
       const hasMin = params.has("min");
       const hasMax = params.has("max");
-      const minParamRaw = params.get("min");
-      const maxParamRaw = params.get("max");
-      const effMin = hasMin ? Number(minParamRaw || 0) : null;
-      const effMax = hasMax ? Number(maxParamRaw) : null;
-
+      const effMin = hasMin ? Number(params.get("min") || 0) : null;
+      const effMax = hasMax ? Number(params.get("max")) : null;
       if (effMin !== null && !Number.isNaN(effMin)) query = query.gte("price_ghs", effMin);
       if (effMax !== null && !Number.isNaN(effMax)) query = query.lte("price_ghs", effMax);
 
-      // Only apply price bucket if no explicit min/max
-      const bucket = params.get("price");
-      if (!hasMin && !hasMax && bucket) {
-        const [minStr, maxStr] = bucket.split("-");
-        const minV = minStr ? Number(minStr) : null;
-        const maxV = maxStr ? Number(maxStr) : null;
-        if (minV !== null && !Number.isNaN(minV)) query = query.gte("price_ghs", minV);
-        if (maxV !== null && !Number.isNaN(maxV)) query = query.lte("price_ghs", maxV);
+      // Bedrooms
+      const bedsParam = params.get("beds");
+      if (bedsParam) {
+        if (bedsParam === "5plus") query = query.gte("bedrooms", 5);
+        else query = query.eq("bedrooms", Number(bedsParam));
       }
 
-      // Amenity
+      // Amenity (single)
       const amenityParam = params.get("amenity");
       if (amenityParam) query = query.contains("amenities", [amenityParam]);
-
-      // Gender
-      const genderParam = params.get("gender");
-      if (genderParam) query = query.eq("gender_pref", genderParam);
 
       const { data, error } = await query;
       if (error) setErr(error.message);
@@ -133,11 +184,14 @@ export default function Listings() {
     fetchListings();
   }, [params]);
 
-  // Cards (unchanged)
+  // Visible cities for chosen region
+  const citiesForRegion = useMemo(() => (region ? GH_LOCATIONS[region] || [] : []), [region]);
+
+  // Cards
   const cards = useMemo(() => {
     return data.map((item) => {
-      const priceValue = item.price ?? item.price_ghs;
-      const title = item.title || `1 Room • ${item.city || item.location || "—"}`;
+      const priceValue = item.price_ghs ?? item.price;
+      const title = item.title || `${item.bedrooms ? `${item.bedrooms} BR` : (item.room_type || "Room")} • ${item.city || item.location || "—"}`;
       const badge = priceValue != null ? `GH₵ ${Number(priceValue).toLocaleString()}` : null;
 
       const img =
@@ -164,16 +218,18 @@ export default function Listings() {
             <div className="mt-2 text-sm text-[#3B2719] space-y-1">
               <div className="flex items-center gap-2">
                 <span>🛏</span>
-                <span>{item.room_type || "Room"}</span>
+                <span>{item.bedrooms ? `${item.bedrooms} bedroom${item.bedrooms > 1 ? "s" : ""}` : (item.room_type || "Room")}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span>🏢</span>
                 <span>{item.property_type || "Apartment"}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>👤</span>
-                <span>{item.gender_pref || "No preference"}</span>
-              </div>
+              {Array.isArray(item.amenities) && item.amenities.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span>✔️</span>
+                  <span className="truncate">{item.amenities.slice(0, 3).join(", ")}{item.amenities.length > 3 ? "…" : ""}</span>
+                </div>
+              )}
             </div>
           </div>
         </Link>
@@ -181,65 +237,63 @@ export default function Listings() {
     });
   }, [data]);
 
-  // Layout (unchanged)
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
-      {/* Header */}
+      {/* Header (matches Home; includes Messages with orange unread badge) */}
       <header className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
-  <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-    <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
-      <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
-      <span className="font-extrabold text-xl">Gida</span>
-    </Link>
+        <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+            <img src={Logo} alt="Gida" className="h-7 w-7 object-contain" />
+            <span className="font-extrabold text-xl">Gida</span>
+          </Link>
 
-    {/* Desktop nav */}
-    <nav className="hidden md:flex items-center gap-6">
-      <Link to="/app/my-listings" className="hover:opacity-70">Dashboard</Link>
-      <Link to="/app/add-listing" className="hover:opacity-70">List Your Space</Link>
-    </nav>
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-8">
+            <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
+            <Link to="/listings" className="hover:opacity-70">Listings</Link>
+            <Link to="/app/inbox" className="relative hover:opacity-70">
+              Messages
+              {unread > 0 && (
+                <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
+                  {unread}
+                </span>
+              )}
+            </Link>
+            <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
+              View Dashboard
+            </Link>
+          </nav>
 
-    {/* Mobile toggle */}
-    <button
-      type="button"
-      className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
-      aria-label="Toggle menu"
-      aria-expanded={mobileOpen}
-      onClick={() => setMobileOpen((v) => !v)}
-    >
-      {mobileOpen ? (
-        // Close icon
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M6.225 4.811 4.811 6.225 10.586 12l-5.775 5.775 1.414 1.414L12 13.414l5.775 5.775 1.414-1.414L13.414 12l5.775-5.775-1.414-1.414L12 10.586 6.225 4.811z" />
-        </svg>
-      ) : (
-        // Hamburger icon
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
-        </svg>
-      )}
-    </button>
-  </div>
+          {/* Mobile toggle */}
+          <button
+            type="button"
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-black/20"
+            aria-label="Toggle menu"
+            aria-expanded={mobileOpen}
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            {mobileOpen ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M6.225 4.811 4.811 6.225 10.586 12l-5.775 5.775 1.414 1.414L12 13.414l5.775 5.775 1.414-1.414L13.414 12l5.775-5.775-1.414-1.414L12 10.586 6.225 4.811z"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+            )}
+          </button>
+        </div>
 
-  {/* Mobile menu panel */}
-  <div className={`${mobileOpen ? "block" : "hidden"} md:hidden border-t border-black/5`}>
-    <nav className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-3">
-      <Link to="/app/my-listings" className="py-2 font-medium hover:opacity-70" onClick={() => setMobileOpen(false)}>
-        Dashboard
-      </Link>
-      <Link to="/app/add-listing" className="py-2 font-medium hover:opacity-70" onClick={() => setMobileOpen(false)}>
-        List Your Space
-      </Link>
-    </nav>
-  </div>
-</header>
-
+        {/* Mobile menu */}
+        <div className={`${mobileOpen ? "block" : "hidden"} md:hidden border-t border-black/10`}>
+          <nav className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-3">
+            <Link to="/roommate-matching" className="py-2 hover:opacity-70" onClick={() => setMobileOpen(false)}>Roommate Matching</Link>
+            <Link to="/listings" className="py-2 hover:opacity-70" onClick={() => setMobileOpen(false)}>Listings</Link>
+            <Link to="/app/inbox" className="py-2 hover:opacity-70" onClick={() => setMobileOpen(false)}>Messages {unread > 0 && <span className="ml-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">{unread}</span>}</Link>
+            <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white text-center" onClick={() => setMobileOpen(false)}>View Dashboard</Link>
+          </nav>
+        </div>
+      </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        {/* Search Form */}
-        <form
-          onSubmit={onSearch}
-          className="bg-white rounded-2xl p-3 shadow flex flex-col md:flex-row gap-3"
-        >
+        {/* Search */}
+        <form onSubmit={onSearch} className="bg-white rounded-2xl p-3 shadow flex flex-col md:flex-row gap-3">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -247,59 +301,46 @@ export default function Listings() {
             className="flex-1 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
           <input
-            type="number"
-            min="0"
-            value={min}
-            onChange={(e) => setMin(e.target.value)}
+            type="number" min="0" value={min} onChange={(e) => setMin(e.target.value)}
             placeholder="Min budget (GHS)"
             className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
           <input
-            type="number"
-            min="0"
-            value={max}
-            onChange={(e) => setMax(e.target.value)}
+            type="number" min="0" value={max} onChange={(e) => setMax(e.target.value)}
             placeholder="Max budget (GHS)"
             className="w-full md:w-48 rounded-xl border border-black/10 px-4 py-3 outline-none"
           />
-          <button
-            type="submit"
-            className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95"
-          >
+          <button type="submit" className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95">
             Search
           </button>
         </form>
 
         {/* Filters */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          {/* Region */}
+          <select value={region} onChange={(e) => { setRegion(e.target.value); setCity(""); }} className="rounded-xl border px-4 py-3 bg-white">
+            <option value="">Region</option>
+            {Object.keys(GH_LOCATIONS).map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+
+          {/* City (depends on region; still editable even without region) */}
           <select value={city} onChange={(e) => setCity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
-            <option value="">Location</option>
-            <option value="Accra">Accra</option>
-            <option value="Kumasi">Kumasi</option>
-            <option value="Takoradi">Takoradi</option>
-          </select>
-
-          <select value={price} onChange={(e) => setPrice(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
-            {PRICE_BUCKETS.map((b) => (
-              <option key={b.value} value={b.value}>{b.label}</option>
+            <option value="">City</option>
+            {(region ? citiesForRegion : Object.values(GH_LOCATIONS).flat()).map((c) => (
+              <option key={c} value={c}>{c}</option>
             ))}
           </select>
 
+          {/* Bedrooms */}
+          <select value={beds} onChange={(e) => setBeds(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
+            {BEDROOMS.map((b) => <option key={b.value} value={b.value}>{b.label} bedroom{b.value && b.value !== "1" ? "s" : ""}</option>)}
+          </select>
+
+          {/* Amenity */}
           <select value={amenity} onChange={(e) => setAmenity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
-            <option value="">Amenities</option>
-            {AMENITIES.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
+            <option value="">Amenity</option>
+            {AMENITIES.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-
-          <select value={gender} onChange={(e) => setGender(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
-            <option value="">Gender pref.</option>
-            <option value="Female">Female</option>
-            <option value="Male">Male</option>
-            <option value="No">No</option>
-          </select>
-
-          <div className="hidden md:block" />
         </div>
 
         {/* Listings Grid */}
