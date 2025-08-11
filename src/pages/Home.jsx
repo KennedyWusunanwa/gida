@@ -49,7 +49,6 @@ export default function Home() {
     return () => sub?.unsubscribe();
   }, []);
 
-  // Fetch 6 featured listings
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -155,7 +154,7 @@ export default function Home() {
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg.black/5">Roommate Matching</Link>
+              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
               <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
               <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
               {user ? (
@@ -178,39 +177,41 @@ export default function Home() {
 
       {/* MAIN */}
       <main className="mx-auto max-w-[1600px] px-3">
-        {/* Two-column hero + listings */}
+        {/* Hero + listings */}
         <section className="pt-10 pb-8 grid gap-10 items-start lg:grid-cols-2">
           {/* LEFT: Headline + HIW */}
           <div>
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-tight font-extrabold tracking-tight">
+            {/* Bigger on mobile */}
+            <h1 className="text-5xl sm:text-6xl md:text-7xl leading-tight font-extrabold tracking-tight">
               Find your Gida,<br />
               find your people.
             </h1>
 
             <div className="mt-10">
-              <h2 className="text-2xl sm:text-3xl font-extrabold">How it Works</h2>
+              <h2 className="text-3xl font-extrabold">How it Works</h2>
 
-              <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-5">
+              {/* Force one row on mobile: 3 columns with smaller images */}
+              <div className="mt-6 grid grid-cols-3 gap-4">
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSignup} alt="Sign Up" className="h-44 sm:h-56 lg:h-64 object-contain" />
-                  <p className="mt-2 text-base font-semibold">Sign Up</p>
+                  <img src={HIWSignup} alt="Sign Up" className="h-28 sm:h-36 md:h-44 object-contain" />
+                  <p className="mt-2 text-sm sm:text-base font-semibold">Sign Up</p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSearch} alt="Search" className="h-44 sm:h-56 lg:h-64 object-contain" />
-                  <p className="mt-2 text-base font-semibold">
+                  <img src={HIWSearch} alt="Search" className="h-28 sm:h-36 md:h-44 object-contain" />
+                  <p className="mt-2 text-sm sm:text-base font-semibold">
                     Search Rooms or<br />List Your Space
                   </p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWConnect} alt="Connect" className="h-44 sm:h-56 lg:h-64 object-contain" />
-                  <p className="mt-2 text-base font-semibold">
+                  <img src={HIWConnect} alt="Connect" className="h-28 sm:h-36 md:h-44 object-contain" />
+                  <p className="mt-2 text-sm sm:text-base font-semibold">
                     Connect<br />with Roommates or Renters
                   </p>
                 </div>
               </div>
 
               <div className="mt-8">
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold mb-3">
+                <h3 className="text-2xl md:text-3xl font-extrabold mb-3">
                   Find your perfect roommate
                 </h3>
                 <Link
@@ -223,7 +224,7 @@ export default function Home() {
 
               {/* Quick Browse */}
               <div className="mt-10">
-                <h4 className="text-lg sm:text-xl font-extrabold">Quick browse</h4>
+                <h4 className="text-xl font-extrabold">Quick browse</h4>
 
                 <div className="mt-3">
                   <div className="text-sm font-semibold mb-2">Popular cities</div>
@@ -248,7 +249,7 @@ export default function Home() {
                       <button
                         key={p.value}
                         onClick={() => browsePrice(p.value)}
-                        className="rounded-full px-4 py-2 bg.white border border-black/10 hover:bg-black/5"
+                        className="rounded-full px-4 py-2 bg-white border border-black/10 hover:bg-black/5"
                         aria-label={`Browse listings priced ${p.label}`}
                       >
                         {p.label}
@@ -260,7 +261,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: Search cards + Popular Listings */}
+          {/* RIGHT: Search + Popular Listings */}
           <div>
             {/* Primary search */}
             <form onSubmit={submitPrimary} className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
@@ -320,7 +321,7 @@ export default function Home() {
               </div>
             </form>
 
-              {/* Popular listings */}
+            {/* Popular listings */}
             <section className="mt-8">
               <h3 className="text-2xl sm:text-3xl font-extrabold">Popular Listings</h3>
               {err && <p className="mt-3 text-red-600">{err}</p>}
