@@ -88,7 +88,6 @@ export default function Home() {
     navigate(`/listings?q=${encodeURIComponent(query)}`);
   };
 
-  // Quick-browse helpers (fill the left space!)
   const browseCity = (c) => navigate(`/listings?city=${encodeURIComponent(c)}`);
   const browsePrice = (bucket) => navigate(`/listings?price=${encodeURIComponent(bucket)}`);
 
@@ -101,7 +100,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
+    <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14] overflow-x-hidden">
       {/* NAV */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-[1600px] px-3 h-16 flex items-center justify-between">
@@ -156,7 +155,7 @@ export default function Home() {
         {mobileOpen && (
           <div className="md:hidden border-t border-black/10" role="dialog" aria-modal="true">
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
-              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
+              <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg.black/5">Roommate Matching</Link>
               <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
               <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
               {user ? (
@@ -180,39 +179,38 @@ export default function Home() {
       {/* MAIN */}
       <main className="mx-auto max-w-[1600px] px-3">
         {/* Two-column hero + listings */}
-        <section className="pt-10 pb-8 grid md:grid-cols-[minmax(660px,760px)_minmax(780px,1fr)] gap-10 items-start">
+        <section className="pt-10 pb-8 grid gap-10 items-start lg:grid-cols-2">
           {/* LEFT: Headline + HIW */}
           <div>
-            <h1 className="text-[86px] leading-[0.93] font-extrabold tracking-tight">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-tight font-extrabold tracking-tight">
               Find your Gida,<br />
               find your people.
             </h1>
 
             <div className="mt-10">
-              <h2 className="text-3xl font-extrabold">How it Works</h2>
+              <h2 className="text-2xl sm:text-3xl font-extrabold">How it Works</h2>
 
-              <div className="mt-6 grid grid-cols-3 gap-5">
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSignup} alt="Sign Up" className="h-60 xl:h-64 object-contain" />
+                  <img src={HIWSignup} alt="Sign Up" className="h-44 sm:h-56 lg:h-64 object-contain" />
                   <p className="mt-2 text-base font-semibold">Sign Up</p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWSearch} alt="Search" className="h-60 xl:h-64 object-contain" />
+                  <img src={HIWSearch} alt="Search" className="h-44 sm:h-56 lg:h-64 object-contain" />
                   <p className="mt-2 text-base font-semibold">
                     Search Rooms or<br />List Your Space
                   </p>
                 </div>
                 <div className="flex flex-col items-center text-center">
-                  <img src={HIWConnect} alt="Connect" className="h-60 xl:h-64 object-contain" />
+                  <img src={HIWConnect} alt="Connect" className="h-44 sm:h-56 lg:h-64 object-contain" />
                   <p className="mt-2 text-base font-semibold">
                     Connect<br />with Roommates or Renters
                   </p>
                 </div>
               </div>
 
-              {/* Catchy title + CTA */}
               <div className="mt-8">
-                <h3 className="text-2xl md:text-3xl font-extrabold mb-3">
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold mb-3">
                   Find your perfect roommate
                 </h3>
                 <Link
@@ -223,9 +221,9 @@ export default function Home() {
                 </Link>
               </div>
 
-              {/* NEW: Quick Browse (uses the leftover space productively) */}
+              {/* Quick Browse */}
               <div className="mt-10">
-                <h4 className="text-xl font-extrabold">Quick browse</h4>
+                <h4 className="text-lg sm:text-xl font-extrabold">Quick browse</h4>
 
                 <div className="mt-3">
                   <div className="text-sm font-semibold mb-2">Popular cities</div>
@@ -250,7 +248,7 @@ export default function Home() {
                       <button
                         key={p.value}
                         onClick={() => browsePrice(p.value)}
-                        className="rounded-full px-4 py-2 bg-white border border-black/10 hover:bg-black/5"
+                        className="rounded-full px-4 py-2 bg.white border border-black/10 hover:bg-black/5"
                         aria-label={`Browse listings priced ${p.label}`}
                       >
                         {p.label}
@@ -266,7 +264,7 @@ export default function Home() {
           <div>
             {/* Primary search */}
             <form onSubmit={submitPrimary} className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] p-3">
-              <div className="grid grid-cols-[1.3fr_1fr_1fr_auto] gap-3 items-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_auto] gap-3 items-center">
                 <label className="sr-only" htmlFor="city">City</label>
                 <input
                   id="city"
@@ -274,7 +272,7 @@ export default function Home() {
                   placeholder="Location (e.g., Accra, Kumasi, East Legon)"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
                 <label className="sr-only" htmlFor="min">Budget Min (GHS)</label>
                 <input
@@ -285,7 +283,7 @@ export default function Home() {
                   placeholder="Budget Min (GHS)"
                   value={min}
                   onChange={(e) => setMin(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
                 <label className="sr-only" htmlFor="max">Budget Max (GHS)</label>
                 <input
@@ -296,7 +294,7 @@ export default function Home() {
                   placeholder="Budget Max (GHS)"
                   value={max}
                   onChange={(e) => setMax(e.target.value)}
-                  className="min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full min-w-0 rounded-xl border border-black/10 px-4 py-3 outline-none focus:ring-2 focus:ring-black/10"
                 />
                 <button type="submit" className="rounded-xl bg-[#3B2719] text-white px-6 py-3 font-semibold hover:opacity-90 whitespace-nowrap">
                   Search
@@ -306,7 +304,7 @@ export default function Home() {
 
             {/* AI search */}
             <form onSubmit={submitAI} className="mt-3 bg-white rounded-2xl p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <label className="sr-only" htmlFor="aiq">Search by description</label>
                 <input
                   id="aiq"
@@ -322,13 +320,12 @@ export default function Home() {
               </div>
             </form>
 
-            {/* Popular listings */}
+              {/* Popular listings */}
             <section className="mt-8">
-              <h3 className="text-3xl font-extrabold">Popular Listings</h3>
+              <h3 className="text-2xl sm:text-3xl font-extrabold">Popular Listings</h3>
               {err && <p className="mt-3 text-red-600">{err}</p>}
               {loading && <p className="mt-3 opacity-70">Loading listings…</p>}
 
-              {/* 1 column on mobile, 3 on desktop */}
               <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                 {featured.map((item) => {
                   const img =
