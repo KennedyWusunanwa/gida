@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +12,7 @@ export default function Dashboard() {
   // form state
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
-  const [city, setCity] = useState(""); // city state
+  const [city, setCity] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -19,23 +20,17 @@ export default function Dashboard() {
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState(null);
 
-  // listings state
   const [listings, setListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
-      const currentUser = data?.user ?? null;
-      if (!currentUser) {
-        navigate("/");
-      } else {
-        setUser(currentUser);
-      }
+      setUser(data?.user ?? null);        // 👈 no redirect here
       setLoadingUser(false);
     };
     getUser();
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -68,48 +63,31 @@ export default function Dashboard() {
   }, [user]);
 
   const resetForm = () => {
-    setTitle("");
-    setLocation("");
-    setCity("");
-    setPrice("");
-    setDescription("");
-    setImageUrl("");
+    setTitle(""); setLocation(""); setCity(""); setPrice("");
+    setDescription(""); setImageUrl("");
   };
 
   const handleAddListing = async (e) => {
     e.preventDefault();
     setMessage(null);
-
-    if (!title || !location || !city || !price) {
-      return setMessage("Title, location, city, and price are required.");
+    if (!title || !location || !city || !price || !user) {
+      return setMessage("Title, location, city, price are required.");
     }
-    if (!user) return;
-
     setAdding(true);
-   const { error } = await supabase.from("listings").insert([
-  {
-    user_id: user.id,
-    title,
-    location,
-    city,
-    price: Number(price), // ✅ changed to 'price'
-    description,
-    image_url: imageUrl || null,
-  },
-]);
-
-    if (error) {
-      setMessage(error.message);
-    } else {
-      resetForm();
-      setMessage("Listing added!");
-    }
+    const { error } = await supabase.from("listings").insert([{
+      user_id: user.id,
+      title, location, city,
+      price: Number(price),
+      description,
+      image_url: imageUrl || null,
+    }]);
+    if (error) setMessage(error.message); else { resetForm(); setMessage("Listing added!"); }
     setAdding(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/");
+    navigate("/");                         // ok to navigate after sign out
   };
 
   const card = {
@@ -120,13 +98,7 @@ export default function Dashboard() {
     boxShadow: "0 6px 18px rgba(0,0,0,.06)",
   };
 
-  if (loadingUser) {
-    return (
-      <div style={{ padding: "2rem" }}>
-        <p>Loading…</p>
-      </div>
-    );
-  }
+  if (loadingUser) return <div style={{ padding: "2rem" }}><p>Loading…</p></div>;
 
   return (
     <div style={{ padding: "2rem", maxWidth: 1200, margin: "0 auto" }}>
@@ -149,63 +121,13 @@ export default function Dashboard() {
       <div style={{ ...card, marginTop: 16 }}>
         <h3 style={{ marginTop: 0, marginBottom: 12 }}>Add New Listing</h3>
         <form onSubmit={handleAddListing} style={{ display: "grid", gap: 12 }}>
-          <input
-            placeholder="Title (e.g., Self-contained, 1BR)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-            required
-          />
-          <input
-            placeholder="Location (e.g., Spintex)"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-            required
-          />
-          <input
-            placeholder="City (e.g., Accra)"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-            required
-          />
-          <input
-            type="number"
-            placeholder="Price in GHS"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-            required
-          />
-          <textarea
-            placeholder="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-          />
-          <input
-            placeholder="Image URL (optional)"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }}
-          />
-
-          <button
-            type="submit"
-            disabled={adding}
-            style={{
-              padding: "12px 16px",
-              borderRadius: 10,
-              border: "none",
-              background: "#5B3A1E",
-              color: "#fff",
-              fontWeight: 600,
-              cursor: "pointer",
-              opacity: adding ? 0.7 : 1,
-            }}
-          >
+          <input placeholder="Title (e.g., Self-contained, 1BR)" value={title} onChange={(e) => setTitle(e.target.value)} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} required />
+          <input placeholder="Location (e.g., Spintex)" value={location} onChange={(e) => setLocation(e.target.value)} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} required />
+          <input placeholder="City (e.g., Accra)" value={city} onChange={(e) => setCity(e.target.value)} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} required />
+          <input type="number" placeholder="Price in GHS" value={price} onChange={(e) => setPrice(e.target.value)} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} required />
+          <textarea placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} />
+          <input placeholder="Image URL (optional)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ padding: 12, borderRadius: 10, border: "1px solid #ddd" }} />
+          <button type="submit" disabled={adding} style={{ padding: "12px 16px", borderRadius: 10, border: "none", background: "#5B3A1E", color: "#fff", fontWeight: 600, cursor: "pointer", opacity: adding ? 0.7 : 1 }}>
             {adding ? "Adding…" : "Add Listing"}
           </button>
         </form>
@@ -214,38 +136,19 @@ export default function Dashboard() {
       {/* My Listings */}
       <div style={{ marginTop: 24 }}>
         <h3 style={{ marginBottom: 12 }}>My Listings</h3>
-
-        {loadingListings ? (
-          <p>Loading listings…</p>
-        ) : listings.length === 0 ? (
+        {loadingListings ? <p>Loading listings…</p> : listings.length === 0 ? (
           <p>No listings yet. Add your first one above.</p>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: 16,
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
             {listings.map((item) => (
               <div key={item.id} style={card}>
                 {item.image_url ? (
-                  <img
-                    src={item.image_url}
-                    alt={item.title}
-                    style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 10, marginBottom: 10 }}
-                  />
+                  <img src={item.image_url} alt={item.title} style={{ width: "100%", height: 150, objectFit: "cover", borderRadius: 10, marginBottom: 10 }} />
                 ) : null}
                 <div style={{ fontWeight: 700, marginBottom: 6 }}>{item.title}</div>
-                <div style={{ color: "#555", marginBottom: 4 }}>
-                  {item.location}, {item.city}
-                </div>
-                <div style={{ color: "#111", marginBottom: 8 }}>
-                  GHC {Number(item.price).toLocaleString()}
-                </div>
-                {item.description ? (
-                  <div style={{ color: "#666", fontSize: 14 }}>{item.description}</div>
-                ) : null}
+                <div style={{ color: "#555", marginBottom: 4 }}>{item.location}, {item.city}</div>
+                <div style={{ color: "#111", marginBottom: 8 }}>GHC {Number(item.price).toLocaleString()}</div>
+                {item.description ? <div style={{ color: "#666", fontSize: 14 }}>{item.description}</div> : null}
               </div>
             ))}
           </div>

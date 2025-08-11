@@ -1,46 +1,44 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { useSession, useSupabaseClient } from "@supabase/auth-helpers-react";
-import { useEffect, useState } from "react";
+// src/components/AdminProtected.jsx
+import React, { useEffect, useState } from "react";
+import { Outlet, Navigate, useLocation } from "react-router-dom";
+import { useSessionContext, useSupabaseClient } from "@supabase/auth-helpers-react";
 
 export default function AdminProtected() {
-  const ctxSession = useSession();
+  const { isLoading, session } = useSessionContext();
   const supabase = useSupabaseClient();
-  const [ready, setReady] = useState(false);
-  const [ok, setOk] = useState(false);
+  const location = useLocation();
+  const [roleOk, setRoleOk] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-
-    const run = async () => {
-      // hydrate session (same pattern as user)
-      let session = ctxSession;
-      if (session === undefined) {
-        const { data } = await supabase.auth.getSession();
-        session = data.session;
-      }
-      if (!session?.user) {
-        if (mounted) { setOk(false); setReady(true); }
-        return;
-      }
-
-      const { data: profile, error } = await supabase
+    let ignore = false;
+    (async () => {
+      if (!session) { setChecking(false); return; }
+      const { data, error } = await supabase
         .from("profiles")
         .select("is_admin")
         .eq("id", session.user.id)
         .maybeSingle();
-
-      if (mounted) {
-        if (error) console.error("AdminProtected profile error:", error);
-        setOk(profile?.is_admin === true);
-        setReady(true);
+      if (!ignore) {
+        setRoleOk(Boolean(data?.is_admin) && !error);
+        setChecking(false);
       }
-    };
+    })();
+    return () => { ignore = true; };
+  }, [session, supabase]);
 
-    run();
-    return () => { mounted = false; };
-  }, [ctxSession, supabase]);
+  if (isLoading || checking) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="animate-pulse text-black/60">Loading…</div>
+      </div>
+    );
+  }
 
-  if (!ready) return <p>Loading admin…</p>;
-  if (!ok) return <Navigate to="/admin/signin" replace />;
+  if (!session || !roleOk) {
+    const next = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/admin/signin?next=${next}`} replace />;
+  }
+
   return <Outlet />;
 }
