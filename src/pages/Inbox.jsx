@@ -1,74 +1,55 @@
 // src/pages/Inbox.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { useDashboardUser } from "../layouts/DashboardLayout";
+import { useSearchParams } from "react-router-dom";
 
 export default function Inbox() {
-  const user = useDashboardUser(); // comes from DashboardLayout's Outlet context
+  const [user, setUser] = useState(null);
+  const [loadingUser, setLoadingUser] = useState(true);
   const [params, setParams] = useSearchParams();
   const activeId = params.get("c") || null;
 
-  // Threads (left)
+  // Threads list
   const [threads, setThreads] = useState([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
 
-  // Messages (right)
-  const [msgs, setMsgs] = useState([]);
-  const [loadingMsgs, setLoadingMsgs] = useState(false);
+  // Messages in active chat
+  const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
-  // Composer
+  // Message input
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
-  // Scroll handling
   const listRef = useRef(null);
-  const prevCountRef = useRef(0);
 
-  // A little guard so async responses from old requests don’t overwrite newer state
-  const reqToken = useRef(0);
+  // 1️⃣ Load logged-in user directly (independent of DashboardLayout)
+  useEffect(() => {
+    const getUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      setUser(data?.user || null);
+      setLoadingUser(false);
+    };
+    getUser();
+  }, []);
 
-  // ---------- Helpers ----------
-  const openConvo = useCallback(
-    (id) => {
-      if (!id) return;
-      const next = new URLSearchParams(params);
-      next.set("c", id);
-      setParams(next);
-    },
-    [params, setParams]
-  );
-
-  function scrollToBottom({ smooth } = { smooth: false }) {
-    const el = listRef.current;
-    if (!el) return;
-    const top = el.scrollHeight;
-    if (smooth) el.scrollTo({ top, behavior: "smooth" });
-    else el.scrollTop = top;
-  }
-
-  // ---------- Load threads (uses inbox_threads view) ----------
+  // 2️⃣ Fetch threads
   const fetchThreads = useCallback(async () => {
     if (!user?.id) return;
-    const token = ++reqToken.current;
     setLoadingThreads(true);
 
     const { data, error } = await supabase
       .from("inbox_threads")
-      .select(
-        "conversation_id, other_user_id, other_full_name, other_avatar_url, last_message_at, has_unread, me_id"
-      )
+      .select("*")
       .eq("me_id", user.id)
-      .order("last_message_at", { ascending: false, nullsFirst: false });
-
-    if (token !== reqToken.current) return; // outdated
+      .order("last_message_at", { ascending: false });
 
     if (error) {
-      console.error("threads error", error);
+      console.error(error);
       setThreads([]);
     } else {
       setThreads(data || []);
-      // Auto-open newest if none selected
+      // Auto-open newest chat
       if (!activeId && data?.length) {
         const next = new URLSearchParams(params);
         next.set("c", data[0].conversation_id);
@@ -82,10 +63,10 @@ export default function Inbox() {
     fetchThreads();
   }, [fetchThreads]);
 
-  // Realtime: refresh threads when new messages are inserted anywhere
+  // Realtime updates for threads
   useEffect(() => {
     if (!user?.id) return;
-    const ch = supabase
+    const channel = supabase
       .channel(`threads:${user.id}`)
       .on(
         "postgres_changes",
@@ -93,66 +74,32 @@ export default function Inbox() {
         fetchThreads
       )
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => supabase.removeChannel(channel);
   }, [user?.id, fetchThreads]);
 
-  // ---------- Load messages for the active conversation ----------
+  // 3️⃣ Fetch messages
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) {
-      setMsgs([]);
+      setMessages([]);
       return;
     }
-    const token = ++reqToken.current;
-    setLoadingMsgs(true);
+    setLoadingMessages(true);
 
-    // Verify membership (prevents confusing UI if RLS denies)
-    const { data: membership, error: memErr } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, last_read_at")
-      .eq("conversation_id", activeId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (token !== reqToken.current) return; // outdated
-
-    if (memErr || !membership) {
-      setMsgs([]);
-      setLoadingMsgs(false);
-      return;
-    }
-
-    const { data: raw, error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, body, created_at")
+      .select("id, sender_id, body, created_at, profiles(full_name, avatar_url)")
       .eq("conversation_id", activeId)
       .order("created_at", { ascending: true });
 
-    if (token !== reqToken.current) return; // outdated
-
     if (error) {
-      console.error("messages error", error);
-      setMsgs([]);
-      setLoadingMsgs(false);
-      return;
+      console.error(error);
+      setMessages([]);
+    } else {
+      setMessages(data || []);
     }
+    setLoadingMessages(false);
 
-    // Hydrate names/avatars
-    const senderIds = [...new Set(raw.map((r) => r.sender_id))];
-    let senderMap = new Map();
-    if (senderIds.length) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", senderIds);
-      senderMap = new Map((profs || []).map((p) => [p.id, p]));
-    }
-
-    if (token !== reqToken.current) return; // outdated
-
-    setMsgs(raw.map((r) => ({ ...r, profile: senderMap.get(r.sender_id) || null })));
-    setLoadingMsgs(false);
-
-    // Mark read (best-effort; ignore errors)
+    // Mark as read
     await supabase
       .from("conversation_participants")
       .update({ last_read_at: new Date().toISOString() })
@@ -164,10 +111,10 @@ export default function Inbox() {
     fetchMessages();
   }, [fetchMessages]);
 
-  // Realtime for active chat: keep thread + messages in sync
+  // Realtime for messages
   useEffect(() => {
     if (!activeId) return;
-    const ch = supabase
+    const channel = supabase
       .channel(`chat:${activeId}`)
       .on(
         "postgres_changes",
@@ -177,178 +124,194 @@ export default function Inbox() {
           table: "messages",
           filter: `conversation_id=eq.${activeId}`,
         },
-        async () => {
-          await fetchMessages();
-          await fetchThreads();
-        }
+        fetchMessages
       )
       .subscribe();
-    return () => supabase.removeChannel(ch);
-  }, [activeId, fetchMessages, fetchThreads]);
+    return () => supabase.removeChannel(channel);
+  }, [activeId, fetchMessages]);
 
-  // Controlled “stick to bottom”
+  // Auto-scroll on new messages
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-
-    const prev = prevCountRef.current;
-    const curr = msgs.length;
-
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const nearBottom = distanceFromBottom < 80; // px tolerance
-
-    // first render or thread change
-    if (prev === 0 || curr === 0 || !activeId) {
-      scrollToBottom({ smooth: false });
-      prevCountRef.current = curr;
-      return;
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
     }
+  }, [messages.length]);
 
-    if (curr > prev) {
-      scrollToBottom({ smooth: nearBottom });
-    }
-
-    prevCountRef.current = curr;
-  }, [activeId, msgs.length]);
-
-  // ---------- UI data ----------
-  const sidebarItems = useMemo(() => {
-    return (threads || []).map((t) => {
-      const name = t.other_full_name || "User";
-      const avatar =
-        t.other_avatar_url ||
-        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
-      return {
-        id: t.conversation_id,
-        name,
-        avatar,
-        date: t.last_message_at,
-        hasUnread: t.has_unread,
-      };
-    });
-  }, [threads]);
-
-  // ---------- Actions ----------
-  async function send(e) {
+  // Send message (optimistic update)
+  async function sendMessage(e) {
     e.preventDefault();
-    const body = text.trim();
-    if (!user?.id || !activeId || !body) return;
+    if (!text.trim() || !activeId || !user?.id) return;
+
+    const optimistic = {
+      id: Date.now(),
+      sender_id: user.id,
+      body: text,
+      created_at: new Date().toISOString(),
+      profiles: { full_name: "You", avatar_url: null },
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    setText("");
     setSending(true);
+
     const { error } = await supabase.from("messages").insert({
       conversation_id: activeId,
       sender_id: user.id,
-      body,
+      body: optimistic.body,
     });
-    if (!error) setText("");
+    if (error) console.error(error);
     setSending(false);
   }
 
-  // ---------- Render ----------
-  return (
-    <div className="min-h-screen bg-[#F7F0E6]">
-      <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-[280px_1fr] gap-4 p-4">
-        {/* Sidebar */}
-        <aside className="bg-white rounded-2xl shadow p-3">
-          <h2 className="text-xl font-extrabold mb-3">Messages</h2>
-          {loadingThreads ? (
-            <p className="opacity-70">Loading…</p>
-          ) : sidebarItems.length === 0 ? (
-            <p className="opacity-70">No conversations yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {sidebarItems.map((c) => (
-                <li key={c.id}>
-                  <button
-                    onClick={() => openConvo(c.id)}
-                    className={`w-full text-left px-3 py-2 rounded-xl flex items-center gap-3 ${
-                      activeId === c.id ? "bg-[#F7F0E6]" : "hover:bg-[#F7F0E6]"
-                    }`}
-                  >
-                    <img src={c.avatar} alt={c.name} className="h-8 w-8 rounded-full" />
-                    <div className="flex-1 flex justify-between items-center">
-                      <div className="min-w-0">
-                        <div className="font-semibold truncate">{c.name}</div>
-                        <div className="text-[11px] opacity-60">
-                          {c.date ? new Date(c.date).toLocaleDateString() : ""}
-                        </div>
-                      </div>
-                      {c.hasUnread && (
-                        <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                          New
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </aside>
+  // Thread click
+  const openChat = (id) => {
+    const next = new URLSearchParams(params);
+    next.set("c", id);
+    setParams(next);
+  };
 
-        {/* Chat */}
-        <section className="bg-white rounded-2xl shadow flex flex-col">
-          <div className="px-4 py-3 border-b border-black/5 flex items-center gap-3">
-            {activeId && (
-              <>
+  if (loadingUser) return <div className="p-6">Loading…</div>;
+
+  return (
+    <div className="min-h-screen bg-[#F7F0E6] grid grid-cols-1 md:grid-cols-[320px_1fr]">
+      {/* Sidebar */}
+      <aside className="bg-white border-r border-gray-200 flex flex-col">
+        <div className="px-4 py-3 font-bold text-lg border-b">Messages</div>
+        {loadingThreads ? (
+          <div className="p-4 text-gray-500">Loading chats…</div>
+        ) : threads.length === 0 ? (
+          <div className="p-4 text-gray-500">No conversations yet</div>
+        ) : (
+          <ul className="flex-1 overflow-y-auto">
+            {threads.map((t) => (
+              <li
+                key={t.conversation_id}
+                onClick={() => openChat(t.conversation_id)}
+                className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-gray-100 ${
+                  activeId === t.conversation_id ? "bg-gray-100" : ""
+                }`}
+              >
                 <img
                   src={
-                    sidebarItems.find((s) => s.id === activeId)?.avatar ||
-                    `https://api.dicebear.com/7.x/initials/svg?seed=User`
+                    t.other_avatar_url ||
+                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                      t.other_full_name || "User"
+                    )}`
                   }
                   alt=""
-                  className="h-8 w-8 rounded-full"
+                  className="h-10 w-10 rounded-full"
                 />
-                <div className="text-lg font-bold truncate">
-                  {sidebarItems.find((s) => s.id === activeId)?.name || "Conversation"}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-            {loadingMsgs && activeId ? (
-              <p className="opacity-70">Loading messages…</p>
-            ) : msgs.length === 0 ? (
-              <div className="opacity-70">No messages yet.</div>
-            ) : (
-              msgs.map((m) => {
-                const mine = m.sender_id === user?.id;
-                const name = m.profile?.full_name || (mine ? "You" : "User");
-                return (
-                  <div
-                    key={m.id}
-                    className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                      mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-[#F6EDE1] text-black"
-                    }`}
-                  >
-                    <div className="mb-1 text-xs font-semibold opacity-70">{name}</div>
-                    <div>{m.body}</div>
-                    <div className="mt-1 text-[10px] opacity-50">
-                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium truncate">
+                      {t.other_full_name || "User"}
+                    </span>
+                    {t.has_unread && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        New
+                      </span>
+                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
+                  <div className="text-sm text-gray-500 truncate">
+                    {t.last_message_preview || ""}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
 
-          <form onSubmit={send} className="p-3 border-t border-black/5 flex gap-2">
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Type a message…"
-              className="flex-1 rounded-xl border border-black/10 px-4 py-3"
-              disabled={!user || !activeId || sending}
-            />
-            <button
-              className="rounded-xl bg-[#5B3A1E] text-white px-4 py-3 font-semibold disabled:opacity-60"
-              disabled={!user || !activeId || sending || !text.trim()}
+      {/* Chat area */}
+      <section className="flex flex-col">
+        {activeId ? (
+          <>
+            {/* Header */}
+            <div className="px-4 py-3 border-b flex items-center gap-3 bg-white">
+              {(() => {
+                const activeThread = threads.find(
+                  (t) => t.conversation_id === activeId
+                );
+                return (
+                  <>
+                    <img
+                      src={
+                        activeThread?.other_avatar_url ||
+                        `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                          activeThread?.other_full_name || "User"
+                        )}`
+                      }
+                      alt=""
+                      className="h-8 w-8 rounded-full"
+                    />
+                    <div className="font-medium">
+                      {activeThread?.other_full_name || "Conversation"}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Messages */}
+            <div
+              ref={listRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#F7F0E6]"
             >
-              {sending ? "Sending…" : "Send"}
-            </button>
-          </form>
-        </section>
-      </div>
+              {loadingMessages ? (
+                <div className="text-gray-500">Loading messages…</div>
+              ) : messages.length === 0 ? (
+                <div className="text-gray-500">No messages yet</div>
+              ) : (
+                messages.map((m) => {
+                  const mine = m.sender_id === user.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                        mine
+                          ? "ml-auto bg-[#5B3A1E] text-white"
+                          : "bg-white text-black"
+                      }`}
+                    >
+                      <div>{m.body}</div>
+                      <div className="mt-1 text-[10px] opacity-60">
+                        {new Date(m.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Input */}
+            <form
+              onSubmit={sendMessage}
+              className="p-3 border-t flex gap-2 bg-white"
+            >
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Type a message…"
+                className="flex-1 rounded-xl border border-gray-300 px-4 py-2"
+                disabled={!user || sending}
+              />
+              <button
+                type="submit"
+                className="bg-[#5B3A1E] text-white px-4 py-2 rounded-xl disabled:opacity-60"
+                disabled={!text.trim() || sending}
+              >
+                Send
+              </button>
+            </form>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            Select a chat to start messaging
+          </div>
+        )}
+      </section>
     </div>
   );
 }
