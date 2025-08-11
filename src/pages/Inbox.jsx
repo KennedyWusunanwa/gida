@@ -22,9 +22,7 @@ export default function Inbox() {
   const [sending, setSending] = useState(false);
 
   const listRef = useRef(null);
-
-  // 👇 NEW: only auto-open the newest thread ONCE (first load)
-  const didAutoOpenRef = useRef(false);
+  const didAutoOpenRef = useRef(false); // only auto-open newest once
 
   const avatarFor = (name) =>
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
@@ -51,7 +49,7 @@ export default function Inbox() {
     setThreads(data);
     setLoadingThreads(false);
 
-    // ✅ only once
+    // auto-open newest exactly once
     if (!didAutoOpenRef.current && !activeId && data.length) {
       didAutoOpenRef.current = true;
       const next = new URLSearchParams(params);
@@ -75,32 +73,19 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [fetchThreads]);
 
-  // Also refresh when tab regains focus (fallback if WS sleeps on mobile)
-  useEffect(() => {
-  const onFocus = () => {
-    fetchThreads();
-    if (activeId) fetchMessages();
-  };
-  window.addEventListener("visibilitychange", onFocus);
-  window.addEventListener("focus", onFocus);
-  return () => {
-    window.removeEventListener("visibilitychange", onFocus);
-    window.removeEventListener("focus", onFocus);
-  };
-}, [fetchThreads, fetchMessages, activeId]);
-
-
-  // Messages for active
+  // Messages for active conversation
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) { setMessages([]); return; }
     setLoadingMessages(true);
 
+    // ensure participant (avoid RLS confusion)
     const { data: member } = await supabase
       .from("conversation_participants")
       .select("conversation_id")
       .eq("conversation_id", activeId)
       .eq("user_id", user.id)
       .maybeSingle();
+
     if (!member) { setMessages([]); setLoadingMessages(false); return; }
 
     const { data, error } = await supabase
@@ -120,7 +105,22 @@ export default function Inbox() {
       .eq("user_id", user.id);
   }, [activeId, user?.id]);
 
+  // Fetch messages on mount/active change
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  // Also refresh when tab regains focus (fallback if WS sleeps on mobile)
+  useEffect(() => {
+    const onFocus = () => {
+      fetchThreads();
+      if (activeId) fetchMessages();
+    };
+    window.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchThreads, fetchMessages, activeId]);
 
   // Realtime for active chat
   useEffect(() => {
@@ -143,7 +143,7 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [activeId, fetchThreads]);
 
-  // Stick to bottom
+  // Stick to bottom on new messages
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length, activeId]);
@@ -184,9 +184,9 @@ export default function Inbox() {
     setParams(next);
   }
 
-  // 👇 NEW: real “Back” on mobile (don’t auto-open again)
+  // Real “Back” on mobile (don’t auto-open again)
   function backToList() {
-    didAutoOpenRef.current = true; // prevent auto-open after back
+    didAutoOpenRef.current = true;
     const next = new URLSearchParams(params);
     next.delete("c");
     setParams(next, { replace: true });
@@ -224,7 +224,7 @@ export default function Inbox() {
                               <span className="shrink-0 bg-[#5B3A1E] text-white text-[10px] px-2 py-0.5 rounded-full">New</span>
                             )}
                           </div>
-                          <div className="text-xs text-black/60 truncate">{t.last_message_preview || ""}</div>
+                          <div className="text-xs text_black/60 truncate">{t.last_message_preview || ""}</div>
                         </div>
                       </button>
                     </li>
