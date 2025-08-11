@@ -77,14 +77,18 @@ export default function Inbox() {
 
   // Also refresh when tab regains focus (fallback if WS sleeps on mobile)
   useEffect(() => {
-    const onFocus = () => { fetchThreads(); if (activeId) fetchMessages(); };
-    window.addEventListener("visibilitychange", onFocus);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.removeEventListener("visibilitychange", onFocus);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchThreads]); // fetchMessages is defined later; we call it via name (hoisted)
+  const onFocus = () => {
+    fetchThreads();
+    if (activeId) fetchMessages();
+  };
+  window.addEventListener("visibilitychange", onFocus);
+  window.addEventListener("focus", onFocus);
+  return () => {
+    window.removeEventListener("visibilitychange", onFocus);
+    window.removeEventListener("focus", onFocus);
+  };
+}, [fetchThreads, fetchMessages, activeId]);
+
 
   // Messages for active
   const fetchMessages = useCallback(async () => {
