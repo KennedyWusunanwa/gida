@@ -19,17 +19,15 @@ export default function Inbox() {
   const [messages, setMessages] = useState([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  // Composer
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
   const listRef = useRef(null);
 
-  // ---------- helpers ----------
   const avatarFor = (name) =>
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
 
-  // ---------- auth ----------
+  // Auth
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -38,127 +36,34 @@ export default function Inbox() {
     })();
   }, []);
 
-  // ---------- thread loading (no view dependency) ----------
+  // THREADS via RPC
   const fetchThreads = useCallback(async () => {
     if (!user?.id) return;
     setLoadingThreads(true);
-
-    // 1) my participant rows
-    const meRes = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, last_read_at")
-      .eq("user_id", user.id);
-
-    if (meRes.error) {
-      console.error("participants(me):", meRes.error);
-      setThreads([]);
-      setLoadingThreads(false);
-      return;
+    let data = [];
+    const { data: rpcData, error } = await supabase.rpc("get_threads");
+    if (error) {
+      console.error("get_threads RPC error:", error);
+    } else {
+      data = rpcData || [];
     }
-
-    const myParts = meRes.data || [];
-    const convIds = myParts.map((p) => p.conversation_id);
-    if (convIds.length === 0) {
-      setThreads([]);
-      setLoadingThreads(false);
-      return;
-    }
-
-    // 2) other participant ids for those conversations
-    const othersRes = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", convIds)
-      .neq("user_id", user.id);
-
-    if (othersRes.error) {
-      console.error("participants(other):", othersRes.error);
-      setThreads([]);
-      setLoadingThreads(false);
-      return;
-    }
-
-    const otherRows = othersRes.data || [];
-    const otherIds = [...new Set(otherRows.map((r) => r.user_id))];
-
-    // 3) profiles for others (best-effort)
-    let profMap = new Map();
-    if (otherIds.length) {
-      const profRes = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", otherIds);
-      if (!profRes.error) {
-        profMap = new Map((profRes.data || []).map((p) => [p.id, p]));
-      } else {
-        // not fatal if RLS blocks profiles; we’ll show initials
-        console.warn("profiles select blocked by RLS, showing initials only");
-      }
-    }
-
-    // 4) latest messages for all conversations (one bulk fetch)
-    const msgRes = await supabase
-      .from("messages")
-      .select("id, conversation_id, sender_id, body, created_at")
-      .in("conversation_id", convIds)
-      .order("created_at", { ascending: false });
-
-    if (msgRes.error) {
-      console.error("messages(last):", msgRes.error);
-    }
-
-    const lastByConv = new Map(); // conversation_id -> last message
-    for (const m of msgRes.data || []) {
-      if (!lastByConv.has(m.conversation_id)) lastByConv.set(m.conversation_id, m);
-    }
-
-    // 5) build thread objects + compute hasUnread
-    const mePartMap = new Map(myParts.map((p) => [p.conversation_id, p]));
-    const firstOtherByConv = new Map();
-    for (const r of otherRows) {
-      if (!firstOtherByConv.has(r.conversation_id)) firstOtherByConv.set(r.conversation_id, r.user_id);
-    }
-
-    const built = convIds.map((cid) => {
-      const otherId = firstOtherByConv.get(cid);
-      const prof = otherId ? profMap.get(otherId) : null;
-      const last = lastByConv.get(cid);
-      const myRead = mePartMap.get(cid)?.last_read_at || null;
-
-      const hasUnread =
-        last && myRead
-          ? new Date(last.created_at) > new Date(myRead) && last.sender_id !== user.id
-          : !!(last && last.sender_id !== user.id);
-
-      return {
-        conversation_id: cid,
-        other_user_id: otherId || null,
-        other_full_name: prof?.full_name || "User",
-        other_avatar_url: prof?.avatar_url || null,
-        last_message_at: last?.created_at || null,
-        last_message_preview: last?.body || "",
-        has_unread: hasUnread,
-      };
-    });
-
-    built.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
-    setThreads(built);
+    setThreads(data);
     setLoadingThreads(false);
 
-    if (!activeId && built.length) {
+    // auto-open newest
+    if (!activeId && data.length) {
       const next = new URLSearchParams(params);
-      next.set("c", built[0].conversation_id);
+      next.set("c", data[0].conversation_id);
       setParams(next, { replace: true });
     }
   }, [user?.id, activeId, params, setParams]);
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
-  // realtime: new messages should reshuffle/highlight
+  // realtime: whenever a message is inserted anywhere, refresh threads
   useEffect(() => {
-    if (!user?.id) return;
     const ch = supabase
-      .channel(`threads-all`)
+      .channel("threads-global")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
@@ -166,14 +71,14 @@ export default function Inbox() {
       )
       .subscribe();
     return () => supabase.removeChannel(ch);
-  }, [fetchThreads, user?.id]);
+  }, [fetchThreads]);
 
-  // ---------- messages ----------
+  // MESSAGES for active thread
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) { setMessages([]); return; }
     setLoadingMessages(true);
 
-    // permission check (participant)
+    // ensure participant (avoids RLS confusion)
     const { data: member } = await supabase
       .from("conversation_participants")
       .select("conversation_id")
@@ -201,7 +106,7 @@ export default function Inbox() {
     }
     setLoadingMessages(false);
 
-    // mark read now
+    // mark read after fetching
     await supabase
       .from("conversation_participants")
       .update({ last_read_at: new Date().toISOString() })
@@ -211,6 +116,7 @@ export default function Inbox() {
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
+  // realtime for active conversation
   useEffect(() => {
     if (!activeId) return;
     const ch = supabase
@@ -221,7 +127,9 @@ export default function Inbox() {
         (payload) => {
           const m = payload.new;
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+          // refresh threads to update preview/unread
           fetchThreads();
+          // scroll to bottom
           queueMicrotask(() => {
             if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
           });
@@ -231,6 +139,7 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [activeId, fetchThreads]);
 
+  // stick to bottom on new messages
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length, activeId]);
@@ -245,7 +154,7 @@ export default function Inbox() {
     const body = text.trim();
     if (!body || !activeId || !user?.id) return;
 
-    // optimistic
+    // optimistic add
     const temp = {
       id: `tmp-${Date.now()}`,
       conversation_id: activeId,
@@ -281,6 +190,7 @@ export default function Inbox() {
           {/* Sidebar */}
           <aside className={`border-r border-black/10 flex flex-col ${activeId ? "hidden md:flex" : "flex"}`}>
             <div className="px-4 py-3 font-extrabold text-lg border-b sticky top-0 bg-white z-10">Messages</div>
+
             {loadingThreads ? (
               <div className="p-4 text-black/60">Loading chats…</div>
             ) : threads.length === 0 ? (
