@@ -12,7 +12,6 @@ export default function Inbox() {
   const [params, setParams] = useSearchParams();
   const activeId = params.get("c") || null;
 
-  // Threads + messages
   const [threads, setThreads] = useState([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
 
@@ -23,6 +22,9 @@ export default function Inbox() {
   const [sending, setSending] = useState(false);
 
   const listRef = useRef(null);
+
+  // 👇 NEW: only auto-open the newest thread ONCE (first load)
+  const didAutoOpenRef = useRef(false);
 
   const avatarFor = (name) =>
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name || "User")}`;
@@ -36,22 +38,22 @@ export default function Inbox() {
     })();
   }, []);
 
-  // THREADS via RPC
+  // Threads via RPC
   const fetchThreads = useCallback(async () => {
     if (!user?.id) return;
     setLoadingThreads(true);
+
     let data = [];
     const { data: rpcData, error } = await supabase.rpc("get_threads");
-    if (error) {
-      console.error("get_threads RPC error:", error);
-    } else {
-      data = rpcData || [];
-    }
+    if (!error) data = rpcData || [];
+    else console.error("get_threads RPC error:", error);
+
     setThreads(data);
     setLoadingThreads(false);
 
-    // auto-open newest
-    if (!activeId && data.length) {
+    // ✅ only once
+    if (!didAutoOpenRef.current && !activeId && data.length) {
+      didAutoOpenRef.current = true;
       const next = new URLSearchParams(params);
       next.set("c", data[0].conversation_id);
       setParams(next, { replace: true });
@@ -60,7 +62,7 @@ export default function Inbox() {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
-  // realtime: whenever a message is inserted anywhere, refresh threads
+  // Realtime: any new message → refresh threads
   useEffect(() => {
     const ch = supabase
       .channel("threads-global")
@@ -73,24 +75,29 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [fetchThreads]);
 
-  // MESSAGES for active thread
+  // Also refresh when tab regains focus (fallback if WS sleeps on mobile)
+  useEffect(() => {
+    const onFocus = () => { fetchThreads(); if (activeId) fetchMessages(); };
+    window.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchThreads]); // fetchMessages is defined later; we call it via name (hoisted)
+
+  // Messages for active
   const fetchMessages = useCallback(async () => {
     if (!activeId || !user?.id) { setMessages([]); return; }
     setLoadingMessages(true);
 
-    // ensure participant (avoids RLS confusion)
     const { data: member } = await supabase
       .from("conversation_participants")
       .select("conversation_id")
       .eq("conversation_id", activeId)
       .eq("user_id", user.id)
       .maybeSingle();
-
-    if (!member) {
-      setMessages([]);
-      setLoadingMessages(false);
-      return;
-    }
+    if (!member) { setMessages([]); setLoadingMessages(false); return; }
 
     const { data, error } = await supabase
       .from("messages")
@@ -98,15 +105,10 @@ export default function Inbox() {
       .eq("conversation_id", activeId)
       .order("created_at", { ascending: true });
 
-    if (error) {
-      console.error("messages(fetch):", error);
-      setMessages([]);
-    } else {
-      setMessages(data || []);
-    }
+    setMessages(error ? [] : (data || []));
     setLoadingMessages(false);
 
-    // mark read after fetching
+    // mark read
     await supabase
       .from("conversation_participants")
       .update({ last_read_at: new Date().toISOString() })
@@ -116,7 +118,7 @@ export default function Inbox() {
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  // realtime for active conversation
+  // Realtime for active chat
   useEffect(() => {
     if (!activeId) return;
     const ch = supabase
@@ -127,9 +129,7 @@ export default function Inbox() {
         (payload) => {
           const m = payload.new;
           setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
-          // refresh threads to update preview/unread
-          fetchThreads();
-          // scroll to bottom
+          fetchThreads(); // update preview/unread
           queueMicrotask(() => {
             if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
           });
@@ -139,7 +139,7 @@ export default function Inbox() {
     return () => supabase.removeChannel(ch);
   }, [activeId, fetchThreads]);
 
-  // stick to bottom on new messages
+  // Stick to bottom
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length, activeId]);
@@ -154,15 +154,14 @@ export default function Inbox() {
     const body = text.trim();
     if (!body || !activeId || !user?.id) return;
 
-    // optimistic add
-    const temp = {
+    // optimistic
+    setMessages((p) => [...p, {
       id: `tmp-${Date.now()}`,
       conversation_id: activeId,
       sender_id: user.id,
       body,
       created_at: new Date().toISOString(),
-    };
-    setMessages((p) => [...p, temp]);
+    }]);
     setText("");
     setSending(true);
 
@@ -181,6 +180,14 @@ export default function Inbox() {
     setParams(next);
   }
 
+  // 👇 NEW: real “Back” on mobile (don’t auto-open again)
+  function backToList() {
+    didAutoOpenRef.current = true; // prevent auto-open after back
+    const next = new URLSearchParams(params);
+    next.delete("c");
+    setParams(next, { replace: true });
+  }
+
   if (loadingUser) return <div className="p-6">Loading…</div>;
 
   return (
@@ -190,7 +197,6 @@ export default function Inbox() {
           {/* Sidebar */}
           <aside className={`border-r border-black/10 flex flex-col ${activeId ? "hidden md:flex" : "flex"}`}>
             <div className="px-4 py-3 font-extrabold text-lg border-b sticky top-0 bg-white z-10">Messages</div>
-
             {loadingThreads ? (
               <div className="p-4 text-black/60">Loading chats…</div>
             ) : threads.length === 0 ? (
@@ -204,18 +210,14 @@ export default function Inbox() {
                     <li key={t.conversation_id}>
                       <button
                         onClick={() => openChat(t.conversation_id)}
-                        className={`w-full text-left p-3 flex items-center gap-3 hover:bg-black/5 ${
-                          isActive ? "bg-black/5" : ""
-                        }`}
+                        className={`w-full text-left p-3 flex items-center gap-3 hover:bg-black/5 ${isActive ? "bg-black/5" : ""}`}
                       >
                         <img src={t.other_avatar_url || avatarFor(name)} alt="" className="h-8 w-8 rounded-full" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <span className={`truncate ${t.has_unread ? "font-extrabold" : "font-medium"}`}>{name}</span>
                             {t.has_unread && (
-                              <span className="shrink-0 bg-[#5B3A1E] text-white text-[10px] px-2 py-0.5 rounded-full">
-                                New
-                              </span>
+                              <span className="shrink-0 bg-[#5B3A1E] text-white text-[10px] px-2 py-0.5 rounded-full">New</span>
                             )}
                           </div>
                           <div className="text-xs text-black/60 truncate">{t.last_message_preview || ""}</div>
@@ -233,16 +235,7 @@ export default function Inbox() {
             {activeId ? (
               <>
                 <div className="px-3 sm:px-4 py-3 border-b border-black/10 flex items-center gap-3 sticky top-0 bg-white/90 backdrop-blur z-10">
-                  <button
-                    onClick={() => {
-                      const next = new URLSearchParams(params);
-                      next.delete("c");
-                      setParams(next, { replace: true });
-                    }}
-                    className="md:hidden rounded-lg px-2 py-1 border border-black/10"
-                  >
-                    Back
-                  </button>
+                  <button onClick={backToList} className="md:hidden rounded-lg px-2 py-1 border border-black/10">Back</button>
                   <img
                     src={activeThread?.other_avatar_url || avatarFor(activeThread?.other_full_name)}
                     alt=""
@@ -262,9 +255,7 @@ export default function Inbox() {
                       return (
                         <div
                           key={m.id}
-                          className={`max-w-[78%] rounded-2xl px-3 sm:px-4 py-2 leading-relaxed shadow ${
-                            mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-white text-black"
-                          }`}
+                          className={`max-w-[78%] rounded-2xl px-3 sm:px-4 py-2 leading-relaxed shadow ${mine ? "ml-auto bg-[#5B3A1E] text-white" : "bg-white text-black"}`}
                         >
                           <div>{m.body}</div>
                           <div className="mt-1 text-[10px] opacity-60 text-right">
@@ -284,11 +275,7 @@ export default function Inbox() {
                     className="flex-1 rounded-xl border border-black/10 px-3 sm:px-4 py-2"
                     disabled={!user || sending}
                   />
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-[#5B3A1E] text-white px-4 py-2 font-semibold disabled:opacity-60"
-                    disabled={!text.trim() || sending}
-                  >
+                  <button type="submit" className="rounded-xl bg-[#5B3A1E] text-white px-4 py-2 font-semibold disabled:opacity-60" disabled={!text.trim() || sending}>
                     Send
                   </button>
                 </form>
