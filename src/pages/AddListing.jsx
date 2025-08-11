@@ -1,38 +1,58 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { supabase } from "../supabaseClient";
 import { useDashboardUser } from "../layouts/DashboardLayout";
 
-// Bedrooms & Ghana-focused amenities
+const GH_LOCATIONS = { /* same as in Listings.jsx */ 
+  "Greater Accra": [
+    "Accra","East Legon","West Legon","North Legon","Airport Residential",
+    "Cantonments","Labone","Osu","Dzorwulu","Roman Ridge","Abelemkpe",
+    "Ridge","Spintex","Teshie","Nungua","Sakumono","Lashibi","Tema",
+    "Tema Community 1","Tema Community 2","Tema Community 3","Tema Community 4",
+    "Tema Community 5","Tema Community 6","Tema Community 7","Tema Community 8",
+    "Tema Community 9","Tema Community 10","Tema Community 11","Tema Community 12",
+    "Tema Community 13","Tema Community 14","Tema Community 15","Tema Community 16",
+    "Tema Community 17","Tema Community 18","Tema Community 19","Tema Community 20",
+    "Tema Community 25","Ashaiman","Adenta","Madina","Ashaley Botwe","Trassaco",
+    "Oyibi","Oyarifa","Pokuase","Amasaman","Achimota","Haatso","Agbogba",
+    "Kwabenya","Dansoman","Kasoa (GA boundary)","Weija","Sowutuom","Darkuman",
+    "Mallam","Gbawe","McCarthy Hill","Tuba","Bortianor","Kokrobite"
+  ],
+  "Ashanti": ["Kumasi","Asokwa","Tafo","Suame","Ejisu","Obuasi","Tanoso","Atonsu","Kwadaso","Nyhiaeso","Santasi","Bantama","Bekwai","Mampong"],
+  "Western": ["Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia","Shama"],
+  "Central": ["Cape Coast","Kasoa","Elmina","Mankessim","Winneba","Agona Swedru"],
+  "Eastern": ["Koforidua","Nsawam","Akosombo","Aburi","Akim Oda","Nkawkaw"],
+  "Northern": ["Tamale","Savelugu","Walewale","Yendi"],
+  "Volta": ["Ho","Hohoe","Sogakope","Keta","Aflao"],
+  "Upper East": ["Bolgatanga","Navrongo","Bawku"],
+  "Upper West": ["Wa","Lawra","Tumu"],
+  "Bono": ["Sunyani","Berekum","Dormaa Ahenkro"],
+  "Bono East": ["Techiman","Kintampo","Atebubu"],
+  "Ahafo": ["Goaso","Bechem"],
+  "Western North": ["Sefwi Wiawso","Bibiani","Juaboso"],
+  "Oti": ["Dambai","Jasikan","Nkwanta"],
+  "Savannah": ["Damongo","Bole","Salaga"],
+  "North East": ["Nalerigu","Gambaga"],
+};
+
 const BEDROOM_CHOICES = ["1", "2", "3", "4", "5", "5+"];
-const AMENITIES = [
-  "Wi-Fi",
-  "AC",
-  "Washer",
-  "Parking",
-  "Kitchen",
-  "Wardrobe",
-  "Security",
-  "Good road",
-  "Ghana Water",
-  "Running water",
-  "Borehole",
-];
+const AMENITIES = ["Wi-Fi","AC","Washer","Parking","Kitchen","Wardrobe","Security","Good road","Ghana Water","Running water","Borehole"];
 
 export default function AddListing() {
   const user = useDashboardUser();
 
   // Core fields
   const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
+  const [region, setRegion] = useState("");
   const [city, setCity] = useState("");
+  const [location, setLocation] = useState(""); // neighborhood/landmark
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  // New persisted fields
-  const [roomType, setRoomType] = useState("Single Room");
+  // New persisted fields (no roomType; combine into Bedrooms)
   const [bedrooms, setBedrooms] = useState("");
   const [amenities, setAmenities] = useState([]);
-  // (keeping older roommate prefs if you still want them)
+
+  // Optional prefs (kept for compatibility)
   const [gender, setGender] = useState("Any");
   const [lifestyle, setLifestyle] = useState("Any");
   const [pets, setPets] = useState("No preference");
@@ -45,7 +65,11 @@ export default function AddListing() {
   const [msg, setMsg] = useState(null);
   const [adding, setAdding] = useState(false);
 
-  // ---- handlers ----
+  const citiesForRegion = useMemo(
+    () => (region ? GH_LOCATIONS[region] || [] : Object.values(GH_LOCATIONS).flat()),
+    [region]
+  );
+
   const onFilesChange = (e) => {
     const selected = Array.from(e.target.files || []);
     if (!selected.length) return;
@@ -84,23 +108,20 @@ export default function AddListing() {
     e.preventDefault();
     setMsg(null);
 
-    if (!title || !location || !city || !price) {
-      return setMsg("Title, location, city, and price are required.");
+    // Require Title, Region, City, Location, Price, Description
+    if (!title || !region || !city || !location || !price || !description) {
+      return setMsg("Title, region, city, location, price, and description are required.");
     }
     if (!user?.id) return setMsg("You must be logged in to add a listing.");
 
     try {
       setAdding(true);
 
-      // Upload images
       const urls = await uploadImagesAndGetUrls();
       const mainUrl = urls[0] || null;
       const extraUrls = urls.slice(1);
-
-      // Bedrooms numeric value (store 5 for "5+")
       const bedroomsValue = bedrooms === "5+" ? 5 : bedrooms ? Number(bedrooms) : null;
 
-      // Insert listing
       const { data: listing, error: listingErr } = await supabase
         .from("listings")
         .insert([
@@ -108,17 +129,14 @@ export default function AddListing() {
             user_id: user.id,
             title,
             location,
-            city,
+            city,                // store canonical city
             price: Number(price),
             description,
             image_url: mainUrl,
             is_published: true,
-
-            room_type: roomType,
             bedrooms: bedroomsValue,
             amenities: amenities.length ? amenities : null,
-
-            // optional older prefs (kept for compatibility)
+            // keep old prefs columns for compatibility if they exist
             gender_pref: gender,
             lifestyle_pref: lifestyle,
             pets_pref: pets,
@@ -129,7 +147,6 @@ export default function AddListing() {
 
       if (listingErr) throw listingErr;
 
-      // Extra images
       if (extraUrls.length) {
         const rows = extraUrls.map((url) => ({ listing_id: listing.id, url }));
         const { error: imgErr } = await supabase.from("listing_images").insert(rows);
@@ -138,20 +155,9 @@ export default function AddListing() {
 
       setMsg("Listing added!");
       // reset
-      setTitle("");
-      setLocation("");
-      setCity("");
-      setPrice("");
-      setDescription("");
-      setRoomType("Single Room");
-      setBedrooms("");
-      setAmenities([]);
-      setGender("Any");
-      setLifestyle("Any");
-      setPets("No preference");
-      setFiles([]);
-      setPreviews([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setTitle(""); setRegion(""); setCity(""); setLocation(""); setPrice(""); setDescription("");
+      setBedrooms(""); setAmenities([]); setGender("Any"); setLifestyle("Any"); setPets("No preference");
+      setFiles([]); setPreviews([]); if (fileInputRef.current) fileInputRef.current.value = "";
 
     } catch (err) {
       setMsg(`Error: ${err.message || String(err)}`);
@@ -175,63 +181,67 @@ export default function AddListing() {
 
         <form onSubmit={submit} className="space-y-7">
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Title</label>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Title *</label>
             <input
               className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              placeholder="Short title (e.g., Cozy 2BR at East Legon)"
+              placeholder="e.g., Cozy 2BR Apartment in East Legon"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              required
             />
+          </div>
+
+          {/* Region + City */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Region *</label>
+              <select
+                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
+                value={region}
+                onChange={(e) => { setRegion(e.target.value); setCity(""); }}
+                required
+              >
+                <option value="">Select region</option>
+                {Object.keys(GH_LOCATIONS).map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">City/Town *</label>
+              <select
+                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                required
+              >
+                <option value="">Select city/town</option>
+                {citiesForRegion.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Location</label>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Neighborhood / Landmark *</label>
             <input
               className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-              placeholder="Area or neighborhood"
+              placeholder="e.g., Near American House, East Legon"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
+              required
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">City</label>
-              <input
-                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                placeholder="e.g., Accra"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Price (GHS)</label>
+              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Price (GHS) *</label>
               <input
                 type="number"
+                min="0"
                 className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                placeholder="Enter price"
+                placeholder="e.g., 3500"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
+                required
               />
-            </div>
-          </div>
-
-          {/* Type + Bedrooms */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Room Type</label>
-              <select
-                className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
-                value={roomType}
-                onChange={(e) => setRoomType(e.target.value)}
-              >
-                <option>Single Room</option>
-                <option>Self-Contained</option>
-                <option>1 Bedroom</option>
-                <option>2 Bedroom</option>
-                <option>3 Bedroom</option>
-                <option>Shared Room</option>
-              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Bedrooms</label>
@@ -277,7 +287,20 @@ export default function AddListing() {
             <p className="mt-2 text-xs text-gray-500">First photo becomes the main image. JPEG/PNG, &lt; 5MB each.</p>
           </div>
 
-          {/* Optional roommate prefs (kept for now) */}
+          {/* Description (required) */}
+          <div>
+            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Description *</label>
+            <textarea
+              rows={5}
+              className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]"
+              placeholder="e.g., Spacious 2-bedroom apartment in East Legon with borehole water, tiled floors, fitted kitchen, and gated compound. 5 mins from American House. 1 year advance."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
+          </div>
+
+          {/* Optional roommate prefs */}
           <div>
             <h3 className="text-lg font-semibold text-[#2B2B2B] mb-4">Roommate Preferences (optional)</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -300,12 +323,6 @@ export default function AddListing() {
                 </select>
               </div>
             </div>
-          </div>
-
-          {/* Description + Publish */}
-          <div>
-            <label className="block text-sm font-medium text-[#2B2B2B] mb-2">Description</label>
-            <textarea rows={4} className="w-full rounded-xl border border-[#E7E1D8] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#A6724B]" placeholder="Describe the place…" value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
           <div className="pt-1">
