@@ -1,5 +1,5 @@
 // src/pages/Home.jsx
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
@@ -7,6 +7,78 @@ import Logo from "../assets/logo.png";
 import HIWSignup from "../assets/hiw-signup.png";
 import HIWSearch from "../assets/hiw-search.png";
 import HIWConnect from "../assets/hiw-connect.png";
+
+// ---- tiny hook to keep unread count fresh in header ----
+function useUnreadCount(user) {
+  const [count, setCount] = useState(0);
+
+  const fetchUnread = useCallback(async () => {
+    if (!user?.id) return setCount(0);
+
+    // Prefer RPC (fast + RLS safe). Falls back to view if RPC missing.
+    let threads = [];
+    const { data: rpcData, error } = await supabase.rpc("get_threads");
+    if (!error && Array.isArray(rpcData)) {
+      threads = rpcData;
+    } else {
+      const { data: viewData } = await supabase
+        .from("inbox_threads")
+        .select("has_unread")
+        .eq("me_id", user.id);
+      threads = viewData || [];
+    }
+    setCount(threads.reduce((n, t) => n + (t?.has_unread ? 1 : 0), 0));
+  }, [user?.id]);
+
+  useEffect(() => { fetchUnread(); }, [fetchUnread]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const ch = supabase
+      .channel("nav-unread")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        fetchUnread
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "conversation_participants", filter: `user_id=eq.${user.id}` },
+        fetchUnread
+      )
+      .subscribe();
+
+    const onFocus = () => fetchUnread();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      supabase.removeChannel(ch);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [user?.id, fetchUnread]);
+
+  return count;
+}
+
+// Reusable link with badge (desktop + mobile)
+function MessagesLink({ to, count, className = "" }) {
+  return (
+    <Link to={to} className={`relative inline-flex items-center ${className}`}>
+      <span>Messages</span>
+      {count > 0 && (
+        <span
+          className="absolute -right-3 -top-2 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[11px] leading-none flex items-center justify-center"
+          aria-label={`${count} unread messages`}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -24,6 +96,7 @@ export default function Home() {
 
   const inboxPath = "/app/inbox";
   const inboxHref = user ? inboxPath : `/auth?next=${encodeURIComponent(inboxPath)}`;
+  const unreadCount = useUnreadCount(user);
 
   const display = (v, f = "—") => (v === null || v === undefined || v === "" ? f : v);
 
@@ -111,7 +184,9 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-8">
             <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
             <Link to="/listings" className="hover:opacity-70">Listings</Link>
-            <Link to={inboxHref} className="hover:opacity-70">Messages</Link>
+
+            {/* Messages with live badge */}
+            <MessagesLink to={inboxHref} count={unreadCount} className="hover:opacity-70" />
 
             {user ? (
               <div className="flex items-center gap-3">
@@ -119,7 +194,7 @@ export default function Home() {
                   View Dashboard
                 </Link>
                 <button
-                  onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
+                  onClick={async () => { await supabase.auth.signOut(); }}
                   className="text-sm underline underline-offset-4 hover:opacity-70"
                 >
                   Logout
@@ -156,12 +231,24 @@ export default function Home() {
             <div className="px-4 py-3 space-y-1 bg-[#F7F0E6]">
               <Link to="/roommate-matching" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Roommate Matching</Link>
               <Link to="/listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Listings</Link>
-              <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">Messages</Link>
+
+              {/* Mobile Messages with badge */}
+              <div className="relative">
+                <Link to={inboxHref} onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-black/5">
+                  Messages
+                </Link>
+                {unreadCount > 0 && (
+                  <span className="absolute right-3 top-2 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[11px] leading-none flex items-center justify-center">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </div>
+
               {user ? (
                 <>
                   <Link to="/app/my-listings" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-2 bg-[#3B2719] text-white text-center mt-2">View Dashboard</Link>
                   <button
-                    onClick={async () => { setMobileOpen(false); await supabase.auth.signOut(); setUser(null); }}
+                    onClick={async () => { setMobileOpen(false); await supabase.auth.signOut(); }}
                     className="w-full text-left rounded-lg px-3 py-2 underline underline-offset-4 hover:bg-black/5"
                   >
                     Logout
@@ -390,7 +477,7 @@ export default function Home() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-black/10 py-8">
+    <footer className="border-t border-black/10 py-8">
         <div className="mx-auto max-w-[1600px] px-3 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src={Logo} alt="Gida" className="h-6 w-6 object-contain" />
