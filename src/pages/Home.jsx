@@ -88,9 +88,21 @@ export default function Home() {
     navigate(`/listings?q=${encodeURIComponent(query)}`);
   };
 
+  // Quick-browse helpers (fill the left space!)
+  const browseCity = (c) => navigate(`/listings?city=${encodeURIComponent(c)}`);
+  const browsePrice = (bucket) => navigate(`/listings?price=${encodeURIComponent(bucket)}`);
+
+  const TOP_CITIES = ["Accra", "Kumasi", "Takoradi", "Tema", "Kasoa", "Cape Coast", "Tamale", "Ho"];
+  const PRICE_BUCKETS = [
+    { label: "≤ 600", value: "0-600" },
+    { label: "600–1,000", value: "600-1000" },
+    { label: "1,000–1,500", value: "1000-1500" },
+    { label: "≥ 1,500", value: "1500-" },
+  ];
+
   return (
     <div className="min-h-screen bg-[#F7F0E6] text-[#2A1E14]">
-      {/* NAV (wide container, tight gutters) */}
+      {/* NAV */}
       <nav className="sticky top-0 z-30 bg-[#F7F0E6]/90 backdrop-blur border-b border-black/5">
         <div className="mx-auto max-w-[1600px] px-3 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -209,6 +221,43 @@ export default function Home() {
                 >
                   Find a Roommate
                 </Link>
+              </div>
+
+              {/* NEW: Quick Browse (uses the leftover space productively) */}
+              <div className="mt-10">
+                <h4 className="text-xl font-extrabold">Quick browse</h4>
+
+                <div className="mt-3">
+                  <div className="text-sm font-semibold mb-2">Popular cities</div>
+                  <div className="flex flex-wrap gap-2">
+                    {TOP_CITIES.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => browseCity(c)}
+                        className="rounded-full px-4 py-2 bg-white border border-black/10 hover:bg-black/5"
+                        aria-label={`Browse listings in ${c}`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="text-sm font-semibold mb-2">Price ranges (GHS / mo)</div>
+                  <div className="flex flex-wrap gap-2">
+                    {PRICE_BUCKETS.map((p) => (
+                      <button
+                        key={p.value}
+                        onClick={() => browsePrice(p.value)}
+                        className="rounded-full px-4 py-2 bg-white border border-black/10 hover:bg-black/5"
+                        aria-label={`Browse listings priced ${p.label}`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
