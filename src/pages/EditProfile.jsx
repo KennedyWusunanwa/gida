@@ -27,6 +27,9 @@ export default function EditProfile() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
 
+  // Header badge (unread)
+  const [unread, setUnread] = useState(0);
+
   // Core profile
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
@@ -50,7 +53,7 @@ export default function EditProfile() {
   const [budgetMax, setBudgetMax] = useState("");
   const [genderPref, setGenderPref] = useState("any");
 
-  // NEW: have-a-place fields
+  // Have-a-place fields
   const [hasPlace, setHasPlace] = useState(false);
   const [rentTotal, setRentTotal] = useState("");
   const [splitYou, setSplitYou] = useState("");
@@ -67,6 +70,9 @@ export default function EditProfile() {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user) { navigate("/auth"); return; }
       setUser(auth.user);
+
+      // unread badge initial
+      refreshUnread(auth.user.id);
 
       const { data: profile, error } = await supabase
         .from("profiles")
@@ -101,7 +107,6 @@ export default function EditProfile() {
         setBudgetMax(profile.budget_max ?? "");
         setGenderPref(profile.gender_pref || "any");
 
-        // NEW
         setHasPlace(!!profile.has_place);
         setRentTotal(profile.rent_total_ghs ?? "");
         setSplitYou(profile.split_you ?? "");
@@ -114,6 +119,31 @@ export default function EditProfile() {
     };
     load();
   }, [navigate]);
+
+  // Live unread badge via realtime inserts
+  useEffect(() => {
+    if (!user?.id) return;
+    const ch = supabase
+      .channel(`unread:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        () => refreshUnread(user.id)
+      )
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [user?.id]);
+
+  async function refreshUnread(uid) {
+    // Count threads with has_unread=true from the view/RPC you already use
+    const { data, error } = await supabase
+      .from("inbox_threads")
+      .select("has_unread")
+      .eq("me_id", uid);
+    if (!error) {
+      setUnread((data || []).filter((t) => t.has_unread).length);
+    }
+  }
 
   const badgeBudget = useMemo(() => {
     if (!budget) return "";
@@ -184,7 +214,6 @@ export default function EditProfile() {
       budget_max: budgetMax ? Number(budgetMax) : null,
       gender_pref: genderPref || "any",
 
-      // NEW
       has_place: !!hasPlace,
       rent_total_ghs: rentTotal ? Number(rentTotal) : null,
       split_you: splitYou ? Number(splitYou) : null,
@@ -226,6 +255,14 @@ export default function EditProfile() {
           </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
+            <Link to="/app/inbox" className="relative hover:opacity-70">
+              Messages
+              {unread > 0 && (
+                <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
+                  {unread}
+                </span>
+              )}
+            </Link>
             <Link to="/app/my-listings" className="hover:opacity-70">View Listings</Link>
             <button onClick={logout} className="hover:opacity-70">Sign Out</button>
           </nav>
@@ -269,6 +306,7 @@ export default function EditProfile() {
               </label>
             </div>
 
+            {/* Fields */}
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <Field label="Age">
                 <input type="number" className="w-full rounded-xl border border-black/10 px-3 py-2" value={age} onChange={(e) => setAge(e.target.value)} />
@@ -281,7 +319,6 @@ export default function EditProfile() {
                 </select>
               </Field>
 
-              {/* Legacy single budget */}
               <Field label="Budget (single)">
                 <div className="flex gap-2">
                   <select className="rounded-xl border border-black/10 px-3 py-2 bg-white" value={currency} onChange={(e) => setCurrency(e.target.value)}>
@@ -299,7 +336,6 @@ export default function EditProfile() {
                 </select>
               </Field>
 
-              {/* City */}
               <Field label="City">
                 <select className="w-full rounded-xl border border-black/10 px-3 py-2 bg-white" value={locationCity} onChange={(e) => setLocationCity(e.target.value)}>
                   <option value="">Select city</option>
@@ -340,7 +376,7 @@ export default function EditProfile() {
               </Field>
             </div>
 
-            {/* NEW: I already have a place */}
+            {/* Have a place */}
             <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <label className="inline-flex items-center gap-2">
                 <input type="checkbox" checked={hasPlace} onChange={(e)=>setHasPlace(e.target.checked)} />
@@ -356,11 +392,11 @@ export default function EditProfile() {
 
                   <Field label="Split ratio (Me : Roommate)">
                     <div className="flex items-center gap-2">
-                      <input type="number" className="w-20 rounded-xl border border-black/10 px-3 py-2"
-                        value={splitYou} onChange={(e)=>setSplitYou(e.target.value)} placeholder="e.g. 1" />
+                      <input type="number" className="w-24 rounded-xl border border-black/10 px-3 py-2"
+                        value={splitYou} onChange={(e)=>setSplitYou(e.target.value)} placeholder="1" />
                       <span>:</span>
-                      <input type="number" className="w-20 rounded-xl border border-black/10 px-3 py-2"
-                        value={splitThem} onChange={(e)=>setSplitThem(e.target.value)} placeholder="e.g. 1" />
+                      <input type="number" className="w-24 rounded-xl border border-black/10 px-3 py-2"
+                        value={splitThem} onChange={(e)=>setSplitThem(e.target.value)} placeholder="1" />
                     </div>
                   </Field>
 
@@ -392,30 +428,43 @@ export default function EditProfile() {
 
             {/* About */}
             <h3 className="mt-8 text-2xl font-extrabold">About Me</h3>
-            <textarea className="mt-3 w/full min-h-[120px] rounded-xl border border-black/10 px-3 py-2"
-              placeholder="Tell us a bit about yourself…" value={about} onChange={(e) => setAbout(e.target.value)} />
+            <textarea
+              className="mt-3 w-full min-h-[120px] rounded-xl border border-black/10 px-3 py-2"
+              placeholder="Tell us a bit about yourself…"
+              value={about}
+              onChange={(e) => setAbout(e.target.value)}
+            />
 
             {/* Interests + Preferred Roommates */}
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="text-2xl font-extrabold">Interests</h3>
-                <input className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
-                  placeholder="Comma separated (e.g., Cooking, hiking, movies)" value={interests}
-                  onChange={(e) => setInterests(e.target.value)} />
+                <input
+                  className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
+                  placeholder="Comma separated (e.g., Cooking, hiking, movies)"
+                  value={interests}
+                  onChange={(e) => setInterests(e.target.value)}
+                />
               </div>
 
               <div>
                 <h3 className="text-2xl font-extrabold">Preferred Roommates (notes)</h3>
-                <input className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
-                  placeholder="Young professional, neat, respectful…" value={preferredRoommates}
-                  onChange={(e) => setPreferredRoommates(e.target.value)} />
+                <input
+                  className="mt-3 w-full rounded-xl border border-black/10 px-3 py-2"
+                  placeholder="Young professional, neat, respectful…"
+                  value={preferredRoommates}
+                  onChange={(e) => setPreferredRoommates(e.target.value)}
+                />
               </div>
             </div>
 
             {/* Actions */}
             <div className="mt-8 flex flex-wrap gap-3">
-              <button type="submit" disabled={saving}
-                className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95 disabled:opacity-60">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-xl bg-[#5B3A1E] text-white px-6 py-3 font-semibold hover:opacity-95 disabled:opacity-60"
+              >
                 {saving ? "Saving…" : "Save Profile"}
               </button>
 
