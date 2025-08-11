@@ -135,7 +135,7 @@ export default function Listings() {
     setAmenity(params.get("amenity") || "");
     setMin(params.get("min") || "");
     setMax(params.get("max") || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
 
   // Write filters to URL
@@ -154,7 +154,7 @@ export default function Listings() {
   useEffect(() => {
     const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, region, city, beds, amenity, min, max]);
 
   // Fetch when URL changes
@@ -181,18 +181,14 @@ export default function Listings() {
       const regionParam = params.get("region") || "";
       const cityParam = params.get("city") || "";
 
-      // Region-only filter (standalone): if region selected and no city, filter city IN (...region cities...)
+      // Region-only filter (standalone)
       if (regionParam && !cityParam) {
         const cities = GH_LOCATIONS[regionParam] || [];
-        if (cities.length) {
-          // Supabase .in() is case-sensitive; normalize by storing canonical city names
-          query = query.in("city", cities);
-        }
+        if (cities.length) query = query.in("city", cities);
       }
 
       // City filter (works with or without region)
       if (cityParam) {
-        // exact match to our canonical list if possible, else ilike fallback
         const canonical = Object.values(GH_LOCATIONS).flat().includes(cityParam);
         query = canonical ? query.eq("city", cityParam) : query.ilike("city", `%${cityParam}%`);
       }
@@ -231,14 +227,25 @@ export default function Listings() {
     [region]
   );
 
+  function formatGHS(raw) {
+    if (raw === null || raw === undefined) return null;
+    const n = typeof raw === "number" ? raw : Number(String(raw).replace(/[, ]/g, ""));
+    if (!Number.isFinite(n)) return null;
+    return `GH₵ ${n.toLocaleString("en-GH")}`;
+  }
+
   // Cards
   const cards = useMemo(() => {
     return data.map((item) => {
-      const priceValue = item.price_ghs ?? item.price;
+      // prefer price_ghs only if it's a positive number; else fall back to price
+      const rawPrice =
+        (typeof item.price_ghs === "number" && item.price_ghs > 0 ? item.price_ghs : null) ??
+        item.price;
+      const badge = formatGHS(rawPrice);
+
       const title =
         item.title ||
         `${item.bedrooms ? `${item.bedrooms} BR` : "Room"} • ${item.city || item.location || "—"}`;
-      const badge = priceValue != null ? `GH₵ ${Number(priceValue).toLocaleString("en-GH")}` : null;
 
       const img =
         item?.image_url && item.image_url.startsWith("http")
