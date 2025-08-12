@@ -68,8 +68,10 @@ export default function Listings() {
   const [region, setRegion] = useState(params.get("region") || "");
   const [city, setCity] = useState(params.get("city") || "");
   const [beds, setBeds] = useState(params.get("beds") || "");
-  // Multiple amenities selection
-  const [amenities, setAmenities] = useState(params.getAll("amenities") || []);
+  // MULTI amenities: CSV in URL -> array in state
+  const [amenities, setAmenities] = useState(
+    () => (params.get("amenities") || "").split(",").filter(Boolean)
+  );
   const [min, setMin] = useState(params.get("min") || "");
   const [max, setMax] = useState(params.get("max") || "");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -106,11 +108,22 @@ export default function Listings() {
     setRegion(params.get("region") || "");
     setCity(params.get("city") || "");
     setBeds(params.get("beds") || "");
-    setAmenities(params.getAll("amenities") || []);
+    setAmenities((params.get("amenities") || "").split(",").filter(Boolean));
     setMin(params.get("min") || "");
     setMax(params.get("max") || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
+
+  // Alphabetical options
+  const sortedRegions = useMemo(
+    () => Object.keys(GH_LOCATIONS).slice().sort((a, b) => a.localeCompare(b)),
+    []
+  );
+  // Visible cities for chosen region (or all cities if no region), sorted A→Z
+  const citiesForRegion = useMemo(() => {
+    const list = region ? (GH_LOCATIONS[region] || []) : Object.values(GH_LOCATIONS).flat();
+    return list.slice().sort((a, b) => a.localeCompare(b));
+  }, [region]);
 
   // Write filters to URL
   const applyFiltersToURL = () => {
@@ -119,9 +132,7 @@ export default function Listings() {
     if (region) next.set("region", region);
     if (city) next.set("city", city.trim());
     if (beds) next.set("beds", beds);
-    if (amenities.length > 0) {
-      amenities.forEach((a) => next.append("amenities", a));
-    }
+    if (amenities.length) next.set("amenities", amenities.join(",")); // CSV
     if (min !== "") next.set("min", String(min).trim());
     if (max !== "") next.set("max", String(max).trim());
     setParams(next, { replace: true });
@@ -130,7 +141,7 @@ export default function Listings() {
   useEffect(() => {
     const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, region, city, beds, amenities, min, max]);
 
   // Fetch when URL changes
@@ -184,10 +195,11 @@ export default function Listings() {
         else query = query.eq("bedrooms", Number(bedsParam));
       }
 
-      // Amenities (multiple)
-      const amenityParams = params.getAll("amenities");
-      if (amenityParams.length > 0) {
-        query = query.contains("amenities", amenityParams);
+      // Amenities (MULTI): match any selected amenity
+      const amenitiesCsv = params.get("amenities") || "";
+      const amenityList = amenitiesCsv.split(",").filter(Boolean);
+      if (amenityList.length) {
+        query = query.overlaps("amenities", amenityList);
       }
 
       const { data, error } = await query;
@@ -198,15 +210,6 @@ export default function Listings() {
 
     fetchListings();
   }, [params]);
-
-  // Alphabetically sorted regions list
-  const sortedRegions = Object.keys(GH_LOCATIONS).sort();
-
-  // Visible cities for chosen region (or all cities if no region) - sorted alphabetically
-  const citiesForRegion = useMemo(
-    () => (region ? [...(GH_LOCATIONS[region] || [])].sort() : Object.values(GH_LOCATIONS).flat().sort()),
-    [region]
-  );
 
   function formatGHS(raw) {
     if (raw === null || raw === undefined) return null;
@@ -286,21 +289,21 @@ export default function Listings() {
             <span className="font-extrabold text-xl">Gida</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
-            <Link to="/listings" className="hover:opacity-70">Listings</Link>
-            <Link to="/app/inbox" className="relative hover:opacity-70">
-              Messages
-              {unread > 0 && (
-                <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
-                  {unread}
-                </span>
-              )}
-            </Link>
-            <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
-              View Dashboard
-            </Link>
-          </nav>
+        <nav className="hidden md:flex items-center gap-8">
+          <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
+          <Link to="/listings" className="hover:opacity-70">Listings</Link>
+          <Link to="/app/inbox" className="relative hover:opacity-70">
+            Messages
+            {unread > 0 && (
+              <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
+                {unread}
+              </span>
+            )}
+          </Link>
+          <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
+            View Dashboard
+          </Link>
+        </nav>
 
           {/* Mobile toggle */}
           <button
@@ -357,14 +360,22 @@ export default function Listings() {
 
         {/* Filters */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          {/* Region (standalone filter) */}
-          <select value={region} onChange={(e) => { setRegion(e.target.value); setCity(""); }} className="rounded-xl border px-4 py-3 bg-white">
+          {/* Region (standalone, alphabetical) */}
+          <select
+            value={region}
+            onChange={(e) => { setRegion(e.target.value); setCity(""); }}
+            className="rounded-xl border px-4 py-3 bg-white"
+          >
             <option value="">Region</option>
             {sortedRegions.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
 
-          {/* City */}
-          <select value={city} onChange={(e) => setCity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
+          {/* City (alphabetical) */}
+          <select
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="rounded-xl border px-4 py-3 bg-white"
+          >
             <option value="">City</option>
             {citiesForRegion.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -376,14 +387,14 @@ export default function Listings() {
             {BEDROOMS.map((b) => <option key={b.value} value={b.value}>{b.label} bedroom{b.value && b.value !== "1" ? "s" : ""}</option>)}
           </select>
 
-          {/* Amenities (multi-select) */}
+          {/* Amenities (MULTI) */}
           <select
             multiple
             value={amenities}
-            onChange={(e) => setAmenities(Array.from(e.target.selectedOptions, opt => opt.value))}
-            className="rounded-xl border px-4 py-3 bg-white h-32"
+            onChange={(e) => setAmenities(Array.from(e.target.selectedOptions).map(o => o.value))}
+            className="rounded-xl border px-4 py-3 bg-white h-36"
           >
-            {AMENITIES.sort().map((a) => (
+            {AMENITIES.slice().sort((a,b)=>a.localeCompare(b)).map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
           </select>
