@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import Logo from "../assets/logo.png";
@@ -19,13 +19,8 @@ const GH_LOCATIONS = {
     "Kwabenya","Dansoman","Kasoa (GA boundary)","Weija","Sowutuom","Darkuman",
     "Mallam","Gbawe","McCarthy Hill","Tuba","Bortianor","Kokrobite"
   ],
-  "Ashanti": [
-    "Kumasi","Asokwa","Tafo","Suame","Ejisu","Obuasi","Tanoso","Atonsu",
-    "Kwadaso","Nyhiaeso","Santasi","Bantama","Bekwai","Mampong"
-  ],
-  "Western": [
-    "Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia","Shama"
-  ],
+  "Ashanti": ["Kumasi","Asokwa","Tafo","Suame","Ejisu","Obuasi","Tanoso","Atonsu","Kwadaso","Nyhiaeso","Santasi","Bantama","Bekwai","Mampong"],
+  "Western": ["Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia","Shama"],
   "Central": ["Cape Coast","Kasoa","Elmina","Mankessim","Winneba","Agona Swedru"],
   "Eastern": ["Koforidua","Nsawam","Akosombo","Aburi","Akim Oda","Nkawkaw"],
   "Northern": ["Tamale","Savelugu","Walewale","Yendi"],
@@ -68,13 +63,15 @@ export default function Listings() {
   const [region, setRegion] = useState(params.get("region") || "");
   const [city, setCity] = useState(params.get("city") || "");
   const [beds, setBeds] = useState(params.get("beds") || "");
-  // MULTI amenities: CSV in URL -> array in state
-  const [amenities, setAmenities] = useState(
-    () => (params.get("amenities") || "").split(",").filter(Boolean)
-  );
+  // multi amenities: CSV <-> array
+  const [amenities, setAmenities] = useState(() => (params.get("amenities") || "").split(",").filter(Boolean));
   const [min, setMin] = useState(params.get("min") || "");
   const [max, setMax] = useState(params.get("max") || "");
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // amenity dropdown
+  const [amenOpen, setAmenOpen] = useState(false);
+  const amenRef = useRef(null);
 
   const [data, setData] = useState([]);
   const [err, setErr] = useState(null);
@@ -102,6 +99,15 @@ export default function Listings() {
     if (!error) setUnread((data || []).filter((t) => t.has_unread).length);
   }
 
+  // close amenity dropdown on outside click
+  useEffect(() => {
+    function onDocClick(e) {
+      if (amenRef.current && !amenRef.current.contains(e.target)) setAmenOpen(false);
+    }
+    if (amenOpen) document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [amenOpen]);
+
   // Sync state from URL
   useEffect(() => {
     setSearch(params.get("q") || "");
@@ -114,12 +120,11 @@ export default function Listings() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
 
-  // Alphabetical options
+  // A→Z options
   const sortedRegions = useMemo(
     () => Object.keys(GH_LOCATIONS).slice().sort((a, b) => a.localeCompare(b)),
     []
   );
-  // Visible cities for chosen region (or all cities if no region), sorted A→Z
   const citiesForRegion = useMemo(() => {
     const list = region ? (GH_LOCATIONS[region] || []) : Object.values(GH_LOCATIONS).flat();
     return list.slice().sort((a, b) => a.localeCompare(b));
@@ -132,7 +137,7 @@ export default function Listings() {
     if (region) next.set("region", region);
     if (city) next.set("city", city.trim());
     if (beds) next.set("beds", beds);
-    if (amenities.length) next.set("amenities", amenities.join(",")); // CSV
+    if (amenities.length) next.set("amenities", amenities.join(","));
     if (min !== "") next.set("min", String(min).trim());
     if (max !== "") next.set("max", String(max).trim());
     setParams(next, { replace: true });
@@ -168,19 +173,19 @@ export default function Listings() {
       const regionParam = params.get("region") || "";
       const cityParam = params.get("city") || "";
 
-      // Region-only filter (standalone)
+      // Region-only filter
       if (regionParam && !cityParam) {
         const cities = GH_LOCATIONS[regionParam] || [];
         if (cities.length) query = query.in("city", cities);
       }
 
-      // City filter (works with or without region)
+      // City filter
       if (cityParam) {
         const canonical = Object.values(GH_LOCATIONS).flat().includes(cityParam);
         query = canonical ? query.eq("city", cityParam) : query.ilike("city", `%${cityParam}%`);
       }
 
-      // Price min/max
+      // Price min/max (uses price_ghs)
       const hasMin = params.has("min");
       const hasMax = params.has("max");
       const effMin = hasMin ? Number(params.get("min") || 0) : null;
@@ -221,7 +226,6 @@ export default function Listings() {
   // Cards
   const cards = useMemo(() => {
     return data.map((item) => {
-      // prefer price_ghs only if it's a positive number; else fall back to price
       const rawPrice =
         (typeof item.price_ghs === "number" && item.price_ghs > 0 ? item.price_ghs : null) ??
         item.price;
@@ -279,6 +283,15 @@ export default function Listings() {
     });
   }, [data]);
 
+  // UI helpers
+  const amenSummary =
+    amenities.length === 0 ? "Amenities"
+    : amenities.length <= 2 ? amenities.join(", ")
+    : `${amenities.slice(0,2).join(", ")} +${amenities.length-2}`;
+
+  const toggleAmenity = (name) =>
+    setAmenities((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
+
   return (
     <div className="min-h-screen bg-[#F7F0E6]">
       {/* Header */}
@@ -289,21 +302,21 @@ export default function Listings() {
             <span className="font-extrabold text-xl">Gida</span>
           </Link>
 
-        <nav className="hidden md:flex items-center gap-8">
-          <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
-          <Link to="/listings" className="hover:opacity-70">Listings</Link>
-          <Link to="/app/inbox" className="relative hover:opacity-70">
-            Messages
-            {unread > 0 && (
-              <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
-                {unread}
-              </span>
-            )}
-          </Link>
-          <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
-            View Dashboard
-          </Link>
-        </nav>
+          <nav className="hidden md:flex items-center gap-8">
+            <Link to="/roommate-matching" className="hover:opacity-70">Roommate Matching</Link>
+            <Link to="/listings" className="hover:opacity-70">Listings</Link>
+            <Link to="/app/inbox" className="relative hover:opacity-70">
+              Messages
+              {unread > 0 && (
+                <span className="absolute -right-3 -top-2 rounded-full bg-orange-500 text-white text-[10px] px-2 py-0.5">
+                  {unread}
+                </span>
+              )}
+            </Link>
+            <Link to="/app/my-listings" className="rounded-xl px-4 py-2 bg-[#3B2719] text-white hover:opacity-90">
+              View Dashboard
+            </Link>
+          </nav>
 
           {/* Mobile toggle */}
           <button
@@ -387,17 +400,46 @@ export default function Listings() {
             {BEDROOMS.map((b) => <option key={b.value} value={b.value}>{b.label} bedroom{b.value && b.value !== "1" ? "s" : ""}</option>)}
           </select>
 
-          {/* Amenities (MULTI) */}
-          <select
-            multiple
-            value={amenities}
-            onChange={(e) => setAmenities(Array.from(e.target.selectedOptions).map(o => o.value))}
-            className="rounded-xl border px-4 py-3 bg-white h-36"
-          >
-            {AMENITIES.slice().sort((a,b)=>a.localeCompare(b)).map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
+          {/* Amenities dropdown (multi) */}
+          <div className="relative" ref={amenRef}>
+            <button
+              type="button"
+              onClick={() => setAmenOpen((v) => !v)}
+              className={`w-full text-left rounded-xl border px-4 py-3 bg-white ${amenOpen ? "ring-2 ring-[#A6724B]" : ""}`}
+            >
+              {amenSummary}
+            </button>
+            {amenOpen && (
+              <div className="absolute z-20 mt-2 w-full rounded-xl border bg-white shadow max-h-60 overflow-auto p-2">
+                {AMENITIES.slice().sort((a,b)=>a.localeCompare(b)).map((a) => (
+                  <label key={a} className="flex items-center gap-2 px-2 py-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={amenities.includes(a)}
+                      onChange={() => toggleAmenity(a)}
+                    />
+                    <span>{a}</span>
+                  </label>
+                ))}
+                <div className="flex gap-2 p-2">
+                  <button
+                    type="button"
+                    onClick={() => { setAmenities([]); setAmenOpen(false); }}
+                    className="text-sm underline"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmenOpen(false)}
+                    className="ml-auto rounded-lg px-3 py-1 bg-[#5B3A1E] text-white text-sm"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Listings Grid */}
