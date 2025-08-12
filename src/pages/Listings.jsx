@@ -63,7 +63,6 @@ export default function Listings() {
   const [region, setRegion] = useState(params.get("region") || "");
   const [city, setCity] = useState(params.get("city") || "");
   const [beds, setBeds] = useState(params.get("beds") || "");
-  // multi amenities: CSV <-> array
   const [amenities, setAmenities] = useState(() => (params.get("amenities") || "").split(",").filter(Boolean));
   const [min, setMin] = useState(params.get("min") || "");
   const [max, setMax] = useState(params.get("max") || "");
@@ -117,14 +116,14 @@ export default function Listings() {
     setAmenities((params.get("amenities") || "").split(",").filter(Boolean));
     setMin(params.get("min") || "");
     setMax(params.get("max") || "");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.toString()]);
+  }, [params.toString()]); // eslint-disable-line
 
   // A→Z options
   const sortedRegions = useMemo(
     () => Object.keys(GH_LOCATIONS).slice().sort((a, b) => a.localeCompare(b)),
     []
   );
+  // City is always selectable; if no region, show ALL cities A→Z
   const citiesForRegion = useMemo(() => {
     const list = region ? (GH_LOCATIONS[region] || []) : Object.values(GH_LOCATIONS).flat();
     return list.slice().sort((a, b) => a.localeCompare(b));
@@ -146,8 +145,7 @@ export default function Listings() {
   useEffect(() => {
     const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, region, city, beds, amenities, min, max]);
+  }, [search, region, city, beds, amenities, min, max]); // eslint-disable-line
 
   // Fetch when URL changes
   useEffect(() => {
@@ -179,7 +177,7 @@ export default function Listings() {
         if (cities.length) query = query.in("city", cities);
       }
 
-      // City filter
+      // City filter (works with or without region)
       if (cityParam) {
         const canonical = Object.values(GH_LOCATIONS).flat().includes(cityParam);
         query = canonical ? query.eq("city", cityParam) : query.ilike("city", `%${cityParam}%`);
@@ -200,11 +198,13 @@ export default function Listings() {
         else query = query.eq("bedrooms", Number(bedsParam));
       }
 
-      // Amenities (MULTI): match any selected amenity
+      // Amenities filter — require ALL selected amenities to be present
       const amenitiesCsv = params.get("amenities") || "";
       const amenityList = amenitiesCsv.split(",").filter(Boolean);
       if (amenityList.length) {
-        query = query.overlaps("amenities", amenityList);
+        query = query.contains("amenities", amenityList);
+        // If you prefer “match ANY”, replace the line above with:
+        // query = query.overlaps("amenities", amenityList);
       }
 
       const { data, error } = await query;
@@ -383,7 +383,7 @@ export default function Listings() {
             {sortedRegions.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
 
-          {/* City (alphabetical) */}
+          {/* City (alphabetical; works even if region is blank) */}
           <select
             value={city}
             onChange={(e) => setCity(e.target.value)}
@@ -400,14 +400,19 @@ export default function Listings() {
             {BEDROOMS.map((b) => <option key={b.value} value={b.value}>{b.label} bedroom{b.value && b.value !== "1" ? "s" : ""}</option>)}
           </select>
 
-          {/* Amenities dropdown (multi) */}
+          {/* Amenities dropdown (multi) — looks like a select with chevron */}
           <div className="relative" ref={amenRef}>
             <button
               type="button"
               onClick={() => setAmenOpen((v) => !v)}
-              className={`w-full text-left rounded-xl border px-4 py-3 bg-white ${amenOpen ? "ring-2 ring-[#A6724B]" : ""}`}
+              className={`w-full text-left rounded-xl border px-4 py-3 bg-white flex items-center justify-between ${amenOpen ? "ring-2 ring-[#A6724B]" : ""}`}
+              aria-haspopup="listbox"
+              aria-expanded={amenOpen}
             >
-              {amenSummary}
+              <span className="truncate">{amenSummary}</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${amenOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.17l3.71-2.94a.75.75 0 11.94 1.16l-4.24 3.36a.75.75 0 01-.94 0L5.21 8.39a.75.75 0 01.02-1.18z" clipRule="evenodd" />
+              </svg>
             </button>
             {amenOpen && (
               <div className="absolute z-20 mt-2 w-full rounded-xl border bg-white shadow max-h-60 overflow-auto p-2">
