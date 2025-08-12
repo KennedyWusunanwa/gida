@@ -24,48 +24,21 @@ const GH_LOCATIONS = {
     "Kwadaso","Nyhiaeso","Santasi","Bantama","Bekwai","Mampong"
   ],
   "Western": [
-    "Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia",
-    "Shama"
+    "Sekondi-Takoradi","Anaji","Airport Ridge","Tarkwa","Apowa","Effia","Shama"
   ],
-  "Central": [
-    "Cape Coast","Kasoa","Elmina","Mankessim","Winneba","Agona Swedru"
-  ],
-  "Eastern": [
-    "Koforidua","Nsawam","Akosombo","Aburi","Akim Oda","Nkawkaw"
-  ],
-  "Northern": [
-    "Tamale","Savelugu","Walewale","Yendi"
-  ],
-  "Volta": [
-    "Ho","Hohoe","Sogakope","Keta","Aflao"
-  ],
-  "Upper East": [
-    "Bolgatanga","Navrongo","Bawku"
-  ],
-  "Upper West": [
-    "Wa","Lawra","Tumu"
-  ],
-  "Bono": [
-    "Sunyani","Berekum","Dormaa Ahenkro"
-  ],
-  "Bono East": [
-    "Techiman","Kintampo","Atebubu"
-  ],
-  "Ahafo": [
-    "Goaso","Bechem"
-  ],
-  "Western North": [
-    "Sefwi Wiawso","Bibiani","Juaboso"
-  ],
-  "Oti": [
-    "Dambai","Jasikan","Nkwanta"
-  ],
-  "Savannah": [
-    "Damongo","Bole","Salaga"
-  ],
-  "North East": [
-    "Nalerigu","Gambaga"
-  ],
+  "Central": ["Cape Coast","Kasoa","Elmina","Mankessim","Winneba","Agona Swedru"],
+  "Eastern": ["Koforidua","Nsawam","Akosombo","Aburi","Akim Oda","Nkawkaw"],
+  "Northern": ["Tamale","Savelugu","Walewale","Yendi"],
+  "Volta": ["Ho","Hohoe","Sogakope","Keta","Aflao"],
+  "Upper East": ["Bolgatanga","Navrongo","Bawku"],
+  "Upper West": ["Wa","Lawra","Tumu"],
+  "Bono": ["Sunyani","Berekum","Dormaa Ahenkro"],
+  "Bono East": ["Techiman","Kintampo","Atebubu"],
+  "Ahafo": ["Goaso","Bechem"],
+  "Western North": ["Sefwi Wiawso","Bibiani","Juaboso"],
+  "Oti": ["Dambai","Jasikan","Nkwanta"],
+  "Savannah": ["Damongo","Bole","Salaga"],
+  "North East": ["Nalerigu","Gambaga"],
 };
 
 const BEDROOMS = [
@@ -95,7 +68,8 @@ export default function Listings() {
   const [region, setRegion] = useState(params.get("region") || "");
   const [city, setCity] = useState(params.get("city") || "");
   const [beds, setBeds] = useState(params.get("beds") || "");
-  const [amenity, setAmenity] = useState(params.get("amenity") || "");
+  // Multiple amenities selection
+  const [amenities, setAmenities] = useState(params.getAll("amenities") || []);
   const [min, setMin] = useState(params.get("min") || "");
   const [max, setMax] = useState(params.get("max") || "");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -132,10 +106,10 @@ export default function Listings() {
     setRegion(params.get("region") || "");
     setCity(params.get("city") || "");
     setBeds(params.get("beds") || "");
-    setAmenity(params.get("amenity") || "");
+    setAmenities(params.getAll("amenities") || []);
     setMin(params.get("min") || "");
     setMax(params.get("max") || "");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.toString()]);
 
   // Write filters to URL
@@ -145,7 +119,9 @@ export default function Listings() {
     if (region) next.set("region", region);
     if (city) next.set("city", city.trim());
     if (beds) next.set("beds", beds);
-    if (amenity) next.set("amenity", amenity);
+    if (amenities.length > 0) {
+      amenities.forEach((a) => next.append("amenities", a));
+    }
     if (min !== "") next.set("min", String(min).trim());
     if (max !== "") next.set("max", String(max).trim());
     setParams(next, { replace: true });
@@ -154,8 +130,8 @@ export default function Listings() {
   useEffect(() => {
     const t = setTimeout(() => applyFiltersToURL(), 400);
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, region, city, beds, amenity, min, max]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, region, city, beds, amenities, min, max]);
 
   // Fetch when URL changes
   useEffect(() => {
@@ -208,9 +184,11 @@ export default function Listings() {
         else query = query.eq("bedrooms", Number(bedsParam));
       }
 
-      // Amenity (single)
-      const amenityParam = params.get("amenity");
-      if (amenityParam) query = query.contains("amenities", [amenityParam]);
+      // Amenities (multiple)
+      const amenityParams = params.getAll("amenities");
+      if (amenityParams.length > 0) {
+        query = query.contains("amenities", amenityParams);
+      }
 
       const { data, error } = await query;
       if (error) setErr(error.message);
@@ -221,9 +199,12 @@ export default function Listings() {
     fetchListings();
   }, [params]);
 
-  // Visible cities for chosen region (or all cities if no region)
+  // Alphabetically sorted regions list
+  const sortedRegions = Object.keys(GH_LOCATIONS).sort();
+
+  // Visible cities for chosen region (or all cities if no region) - sorted alphabetically
   const citiesForRegion = useMemo(
-    () => (region ? GH_LOCATIONS[region] || [] : Object.values(GH_LOCATIONS).flat()),
+    () => (region ? [...(GH_LOCATIONS[region] || [])].sort() : Object.values(GH_LOCATIONS).flat().sort()),
     [region]
   );
 
@@ -379,7 +360,7 @@ export default function Listings() {
           {/* Region (standalone filter) */}
           <select value={region} onChange={(e) => { setRegion(e.target.value); setCity(""); }} className="rounded-xl border px-4 py-3 bg-white">
             <option value="">Region</option>
-            {Object.keys(GH_LOCATIONS).map((r) => <option key={r} value={r}>{r}</option>)}
+            {sortedRegions.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
 
           {/* City */}
@@ -395,10 +376,16 @@ export default function Listings() {
             {BEDROOMS.map((b) => <option key={b.value} value={b.value}>{b.label} bedroom{b.value && b.value !== "1" ? "s" : ""}</option>)}
           </select>
 
-          {/* Amenity */}
-          <select value={amenity} onChange={(e) => setAmenity(e.target.value)} className="rounded-xl border px-4 py-3 bg-white">
-            <option value="">Amenity</option>
-            {AMENITIES.map((a) => <option key={a} value={a}>{a}</option>)}
+          {/* Amenities (multi-select) */}
+          <select
+            multiple
+            value={amenities}
+            onChange={(e) => setAmenities(Array.from(e.target.selectedOptions, opt => opt.value))}
+            className="rounded-xl border px-4 py-3 bg-white h-32"
+          >
+            {AMENITIES.sort().map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
           </select>
         </div>
 
